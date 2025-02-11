@@ -1,7 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+
+// Add GameState type definition
+type GameState = 'start' | 'playing' | 'gameOver' | 'idle';
 
 interface FallingObject {
   id: number;
@@ -66,7 +71,7 @@ export default function Game() {
   const [objects, setObjects] = useState<FallingObject[]>([]);
   const [score, setScore] = useState(0);
   const [gameState, setGameState] = useState<GameState>('start');
-  const [lives, setLives] = useState(6); // Initialize with 6 internal lives
+  const [lives, setLives] = useState(6);
   const [level, setLevel] = useState(1);
   const [dino, setDino] = useState<DinoState>({
     x: 350,
@@ -84,15 +89,12 @@ export default function Game() {
   const GRAVITY = 1.2;
   const GROUND_Y = 500;
   const CANVAS_HEIGHT = 600;
-  const FALL_SPEED = 5; // Increased for faster falling
-  const SPAWN_INTERVAL = 300; // Much faster initial spawn rate
 
   // Add a ref to track the mouth closing timeout
   const mouthTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Add a ref for the animation frame
   const animationFrameRef = useRef<number>();
-  const gameLoopIntervalRef = useRef<NodeJS.Timeout>();
 
   // Add these new state variables in the Game component
   const [particles, setParticles] = useState<Particle[]>([]);
@@ -133,17 +135,17 @@ export default function Game() {
     const preloadImages = () => {
       // Preload billionaire images
       Object.entries(BILLIONAIRE_IMAGES).forEach(([name, src]) => {
-        const img = new Image();
+        const img = new window.Image();
         img.src = src;
         preloadedImages.current.set(name, img);
       });
 
       // Only preload left and right dino images
-      const dinoLeft = new Image();
-      const dinoRight = new Image();
+      const dinoLeft = new window.Image();
+      const dinoRight = new window.Image();
       
-      dinoLeft.src = '/dinomouthopen2.png';      // Dino facing left
-      dinoRight.src = '/dinomouthopen2right.png'; // Dino facing right
+      dinoLeft.src = '/dinomouthopen2.png';
+      dinoRight.src = '/dinomouthopen2right.png';
       
       preloadedImages.current.set('dinoLeft', dinoLeft);
       preloadedImages.current.set('dinoRight', dinoRight);
@@ -198,7 +200,6 @@ export default function Game() {
     setScore(0);
     setLives(6); // Reset to 6 internal lives
     setLevel(1);
-    setSpawnInterval(300); // Start with faster spawns
     setObjects([]);
     
     spawnNewObject(); // Immediately spawn first object when game starts
@@ -211,20 +212,18 @@ export default function Game() {
     let lastTime = performance.now();
     const keysPressed = new Set<string>();
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent default behavior for space key
-      if (e.code === 'Space') {
-        e.preventDefault();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Space') {
+        event.preventDefault();
       }
-      keysPressed.add(e.code);
+      keysPressed.add(event.code);
     };
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      // Prevent default behavior for space key
-      if (e.code === 'Space') {
-        e.preventDefault();
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code === 'Space') {
+        event.preventDefault();
       }
-      keysPressed.delete(e.code);
+      keysPressed.delete(event.code);
     };
 
     // Separate animation frame for dino movement
@@ -295,7 +294,7 @@ export default function Game() {
   }, [gameState, JUMP_FORCE]);
 
   // Modify spawn new object function to ensure better random placement
-  const spawnNewObject = useCallback((xPosition?: number) => {
+  const spawnNewObject = (xPosition?: number) => {
     const canvas = canvasRef.current;
     if (!canvas || gameState !== 'playing' || billionaires.length === 0) return;
 
@@ -336,10 +335,10 @@ export default function Game() {
       isDragging: false
     };
     setObjects(prev => [...prev, newObject]);
-  }, [billionaires, gameState]);
+  };
 
   // Add collision detection helper function
-  const checkCollision = useCallback((dino: DinoState, obj: FallingObject) => {
+  const checkCollision = (dino: DinoState, obj: FallingObject) => {
     const dinoBox = {
       x: dino.x + 20,
       y: dino.y + 20,
@@ -358,7 +357,7 @@ export default function Game() {
       dinoBox.x < objBox.x + objBox.width &&
       dinoBox.x + dinoBox.width > objBox.x &&
       dinoBox.y < objBox.y + objBox.height &&
-      dinoBox.y + dinoBox.height > objBox.y
+      dinoBox.y + dinoBox.width > objBox.y
     );
 
     if (hasCollided) {
@@ -372,10 +371,10 @@ export default function Game() {
     }
 
     return hasCollided;
-  }, [RAINBOW_COLORS, createMoneyRain]);
+  };
 
   // Modify the renderGame function to use preloaded images
-  const renderGame = useCallback(() => {
+  const renderGame = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -469,7 +468,7 @@ export default function Game() {
     }
 
     requestAnimationFrame(renderGame);
-  }, [gameState, objects, score, lives, dino, RAINBOW_COLORS, moneyRain, particles, rainbowEffects]);
+  };
 
   // Modify the spawn loop effect to properly clean up
   useEffect(() => {
@@ -652,7 +651,7 @@ export default function Game() {
       );
       setFallSpeed(newFallSpeed);
     }
-  }, [score, gameState]);
+  }, [score, gameState, level]);
 
   // Update render effect with better cleanup
   useEffect(() => {
@@ -712,10 +711,10 @@ export default function Game() {
   const createRainbowEffect = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
+
     const newEffect: RainbowEffect = {
-      x: 0,
-      y: canvas.height,
+      x: 0, // Start at left edge
+      y: canvas.height, // Start from bottom
       height: 0,
       opacity: 1,
       text: "QUEER AGENDA"
@@ -755,8 +754,6 @@ export default function Game() {
         
         {loading ? (
           <div className="text-emerald-100 text-center p-4">Loading...</div>
-        ) : billionaires.length === 0 ? (
-          <div className="text-emerald-100 text-center p-4">No data available</div>
         ) : (
           <table className="w-full text-emerald-100">
             <thead>
@@ -771,17 +768,17 @@ export default function Game() {
                 <tr key={billionaire.name} className="border-b border-emerald-700">
                   <td className="px-4 py-2 flex items-center">
                     <div className="relative w-8 h-8">
-                      <Image 
+                      <Image
                         src={BILLIONAIRE_IMAGES[billionaire.name]}
                         alt={billionaire.name}
-                        fill
+                        width={32}
+                        height={32}
                         className="rounded-full mr-2"
-                        onLoadingComplete={(result) => {
-                          if (result.naturalWidth === 0) {
-                            // Handle error case
-                            result.onerror = null;
-                            result.src = '@fallback-avatar.png';
-                          }
+                        onError={(e) => {
+                          // Prevent infinite error loop
+                          e.currentTarget.onerror = null;
+                          // Use proper path for fallback image
+                          e.currentTarget.src = '/fallback-avatar.png'; // Note: changed from @ to /
                         }}
                       />
                     </div>
