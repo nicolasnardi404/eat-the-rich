@@ -110,6 +110,20 @@ export default function Game() {
   // Add new ref for preloaded images
   const preloadedImages = useRef<Map<string, HTMLImageElement>>(new Map());
 
+  // Replace certain useState hooks with useRef
+  const scoreRef = useRef<number>(0);
+  const livesRef = useRef<number>(3);
+  const objectsRef = useRef<FallingObject[]>([]);
+  const particlesRef = useRef<Particle[]>([]);
+  const moneyRainRef = useRef<MoneyParticle[]>([]);
+  const rainbowEffectsRef = useRef<RainbowEffect[]>([]);
+  const dinoRef = useRef<DinoState>({
+    x: 350,
+    y: 500,
+    isJumping: false,
+    velocity: 0
+  });
+
   // Add this new effect at the start of the component
   useEffect(() => {
     // Preload all game images
@@ -151,16 +165,21 @@ export default function Game() {
   }, []);
 
   const startGame = () => {
-    setGameState('playing');
-    setScore(0);
-    setLives(3);
-    setObjects([]);
-    setLevel(1);
-    setSpawnInterval(800);
-    // Reset additional states
+    // Clear any existing timeouts and animation frames
+    if (mouthTimeoutRef.current) {
+      clearTimeout(mouthTimeoutRef.current);
+    }
+    
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    // Reset all particles and effects
     setParticles([]);
     setMoneyRain([]);
     setRainbowEffects([]);
+
+    // Reset dino state
     setDino({
       x: 350,
       y: 500,
@@ -169,15 +188,13 @@ export default function Game() {
     });
     setIsDinoOpen(false);
     
-    // Clear any existing timeouts
-    if (mouthTimeoutRef.current) {
-      clearTimeout(mouthTimeoutRef.current);
-    }
-    
-    // Clear any existing animation frames
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
+    // Start the game loop
+    setGameState('playing');
+    setScore(0);
+    setLives(3);
+    setLevel(1);
+    setSpawnInterval(800);
+    setObjects([]);
     
     spawnNewObject(); // Immediately spawn first object when game starts
   };
@@ -298,9 +315,14 @@ export default function Game() {
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
 
+    // Ensure canvas dimensions are maintained
+    canvas.width = 800;  // Force constant width
+    canvas.height = 600; // Force constant height
+
+    // Clear the canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Add money-themed background
+    // Draw background
     ctx.fillStyle = '#065f46';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -603,7 +625,8 @@ export default function Game() {
         color
       });
     }
-    setParticles(prev => [...prev, ...newParticles]);
+    const MAX_PARTICLES = 500;
+    setParticles(prev => [...prev, ...newParticles].slice(-MAX_PARTICLES));
   };
 
   // Add this function to create money rain effect
@@ -617,7 +640,8 @@ export default function Game() {
         symbol: MONEY_SYMBOLS[Math.floor(Math.random() * MONEY_SYMBOLS.length)]
       });
     }
-    setMoneyRain(prev => [...prev, ...newMoneyParticles]);
+    const MAX_MONEY_RAIN = 300;
+    setMoneyRain(prev => [...prev, ...newMoneyParticles].slice(-MAX_MONEY_RAIN));
   };
 
   // Add rainbow effect creation function
@@ -633,7 +657,8 @@ export default function Game() {
       text: "QUEER AGENDA"
     };
     
-    setRainbowEffects(prev => [...prev, newEffect]);
+    const MAX_RAINBOW_EFFECTS = 10;
+    setRainbowEffects(prev => [...prev, newEffect].slice(-MAX_RAINBOW_EFFECTS));
     
     // Clear all billionaires except rainbows
     setObjects(prev => {
