@@ -157,6 +157,28 @@ export default function Game() {
     setObjects([]);
     setLevel(1);
     setSpawnInterval(800);
+    // Reset additional states
+    setParticles([]);
+    setMoneyRain([]);
+    setRainbowEffects([]);
+    setDino({
+      x: 350,
+      y: 500,
+      isJumping: false,
+      velocity: 0
+    });
+    setIsDinoOpen(false);
+    
+    // Clear any existing timeouts
+    if (mouthTimeoutRef.current) {
+      clearTimeout(mouthTimeoutRef.current);
+    }
+    
+    // Clear any existing animation frames
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
     spawnNewObject(); // Immediately spawn first object when game starts
   };
 
