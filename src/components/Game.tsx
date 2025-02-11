@@ -484,109 +484,10 @@ export default function Game() {
     requestAnimationFrame(renderGame);
   };
 
-  // Update game loop effect to ensure continuous running
-  useEffect(() => {
-    if (gameState === 'playing') {
-      const gameLoop = () => {
-        // Update falling objects with collision detection
-        setObjects((prevObjects) => {
-          return prevObjects.map((obj) => ({
-            ...obj,
-            y: obj.y + fallSpeed,
-          })).filter((obj) => {
-            // Check if object hits dino
-            if (checkCollision(dino, obj)) {
-              const billionaire = billionaires.find(b => b.name === obj.type);
-              if (billionaire) {
-                setScore(prev => prev + billionaire.priceToEat);
-              }
-              setIsDinoOpen(true);
-              if (mouthTimeoutRef.current) {
-                clearTimeout(mouthTimeoutRef.current);
-              }
-              mouthTimeoutRef.current = setTimeout(() => {
-                setIsDinoOpen(false);
-              }, 200);
-              return false;
-            }
-            if (obj.y >= CANVAS_HEIGHT) {
-              setLives(prev => prev - 1);
-              if (lives <= 1) {
-                setGameState('gameOver');
-              }
-              return false;
-            }
-            return true;
-          });
-        });
-
-        // Update dino physics
-        setDino(prev => {
-          if (!prev.isJumping) return prev;
-          
-          const newVelocity = prev.velocity + GRAVITY;
-          const newY = prev.y + newVelocity;
-
-          if (newY >= GROUND_Y) {
-            return {
-              ...prev,
-              y: GROUND_Y,
-              isJumping: false,
-              velocity: 0
-            };
-          }
-
-          return {
-            ...prev,
-            y: newY,
-            velocity: newVelocity
-          };
-        });
-
-        // Update particles
-        setParticles(prev => 
-          prev.map(p => ({
-            ...p,
-            x: p.x + p.vx,
-            y: p.y + p.vy,
-            life: p.life - 0.02
-          })).filter(p => p.life > 0)
-        );
-
-        // Update money rain
-        setMoneyRain(prev =>
-          prev.map(m => ({
-            ...m,
-            y: m.y + m.speed
-          })).filter(m => m.y < CANVAS_HEIGHT)
-        );
-
-        // Update rainbow effects - increased speed and fade rate
-        setRainbowEffects(prev => 
-          prev.map(effect => ({
-            ...effect,
-            y: effect.y - 20, // Increased from -10 to -20 for faster rising
-            opacity: effect.y < 0 ? effect.opacity - 0.04 : effect.opacity // Faster fade out
-          })).filter(effect => effect.opacity > 0)
-        );
-
-        renderGame();
-        animationFrameRef.current = requestAnimationFrame(gameLoop);
-      };
-
-      animationFrameRef.current = requestAnimationFrame(gameLoop);
-
-      return () => {
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-      };
-    }
-  }, [gameState, dino, lives, billionaires, fallSpeed]);
-
-  // Replace the spawn timer effect with this improved version
+  // Modify the spawn loop effect to properly clean up
   useEffect(() => {
     if (gameState !== 'playing') return;
+    let animationFrameId: number;
 
     const spawnLoop = (timestamp: number) => {
       if (timestamp - lastSpawnTime.current >= currentSpawnInterval) {
@@ -625,13 +526,123 @@ export default function Game() {
       }
 
       if (gameState === 'playing') {
-        requestAnimationFrame(spawnLoop);
+        animationFrameId = requestAnimationFrame(spawnLoop);
       }
     };
 
-    const animationId = requestAnimationFrame(spawnLoop);
-    return () => cancelAnimationFrame(animationId);
+    animationFrameId = requestAnimationFrame(spawnLoop);
+    
+    // Proper cleanup
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, [gameState, level, objects, currentSpawnInterval]);
+
+  // Modify the game loop to properly clean up
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    let animationFrameId: number;
+
+    const gameLoop = () => {
+      setObjects((prevObjects) => {
+        return prevObjects.map((obj) => ({
+          ...obj,
+          y: obj.y + fallSpeed,
+        })).filter((obj) => {
+          // Check if object hits dino
+          if (checkCollision(dino, obj)) {
+            const billionaire = billionaires.find(b => b.name === obj.type);
+            if (billionaire) {
+              setScore(prev => prev + billionaire.priceToEat);
+            }
+            setIsDinoOpen(true);
+            if (mouthTimeoutRef.current) {
+              clearTimeout(mouthTimeoutRef.current);
+            }
+            mouthTimeoutRef.current = setTimeout(() => {
+              setIsDinoOpen(false);
+            }, 200);
+            return false;
+          }
+          if (obj.y >= CANVAS_HEIGHT) {
+            setLives(prev => prev - 1);
+            if (lives <= 1) {
+              setGameState('gameOver');
+            }
+            return false;
+          }
+          return true;
+        });
+      });
+
+      // Update dino physics
+      setDino(prev => {
+        if (!prev.isJumping) return prev;
+        
+        const newVelocity = prev.velocity + GRAVITY;
+        const newY = prev.y + newVelocity;
+
+        if (newY >= GROUND_Y) {
+          return {
+            ...prev,
+            y: GROUND_Y,
+            isJumping: false,
+            velocity: 0
+          };
+        }
+
+        return {
+          ...prev,
+          y: newY,
+          velocity: newVelocity
+        };
+      });
+
+      // Update particles
+      setParticles(prev => 
+        prev.map(p => ({
+          ...p,
+          x: p.x + p.vx,
+          y: p.y + p.vy,
+          life: p.life - 0.02
+        })).filter(p => p.life > 0)
+      );
+
+      // Update money rain
+      setMoneyRain(prev =>
+        prev.map(m => ({
+          ...m,
+          y: m.y + m.speed
+        })).filter(m => m.y < CANVAS_HEIGHT)
+      );
+
+      // Update rainbow effects - increased speed and fade rate
+      setRainbowEffects(prev => 
+        prev.map(effect => ({
+          ...effect,
+          y: effect.y - 20, // Increased from -10 to -20 for faster rising
+          opacity: effect.y < 0 ? effect.opacity - 0.04 : effect.opacity // Faster fade out
+        })).filter(effect => effect.opacity > 0)
+      );
+
+      renderGame();
+
+      if (gameState === 'playing') {
+        animationFrameId = requestAnimationFrame(gameLoop);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(gameLoop);
+
+    // Proper cleanup
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [gameState, dino, lives, billionaires, fallSpeed]);
 
   // Update the level management
   useEffect(() => {
@@ -733,6 +744,18 @@ export default function Game() {
       return prev.filter(obj => obj.type === 'rainbow');
     });
   };
+
+  // Add a cleanup effect when component unmounts
+  useEffect(() => {
+    return () => {
+      // Reset all game state
+      setGameState('idle');
+      setObjects([]);
+      setScore(0);
+      setLevel(1);
+      setLives(3);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-emerald-900 flex flex-col items-center justify-center p-8">
