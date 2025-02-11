@@ -6,7 +6,7 @@ interface FallingObject {
   id: number;
   x: number;
   y: number;
-  type: 'elon' | 'bezos' | 'zuck' | 'trump';
+  type: 'elon' | 'bezos' | 'zuck' | 'trump' | 'rainbow';
   isDragging: boolean;
 }
 
@@ -48,6 +48,14 @@ interface MoneyParticle {
   symbol: string;
 }
 
+interface RainbowEffect {
+  x: number;
+  y: number;
+  height: number;
+  opacity: number;
+  text: string;
+}
+
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [objects, setObjects] = useState<FallingObject[]>([]);
@@ -87,11 +95,43 @@ export default function Game() {
   // Add these new state variables in the Game component
   const [particles, setParticles] = useState<Particle[]>([]);
   const [moneyRain, setMoneyRain] = useState<MoneyParticle[]>([]);
+  const [rainbowEffects, setRainbowEffects] = useState<RainbowEffect[]>([]);
 
   // Add these constants with the other game constants
   const PARTICLE_COUNT = 20;
   const MONEY_PARTICLE_COUNT = 15;
   const MONEY_SYMBOLS = ['$', '💵', '💰', '💎'];
+  const RAINBOW_SPAWN_CHANCE = 0.02; // Reduced to 5% chance for rainbow power-up
+  const RAINBOW_COLORS = [
+    '#FF0000', '#FF7F00', '#FFFF00', 
+    '#00FF00', '#0000FF', '#4B0082', '#8B00FF'
+  ];
+
+  // Add new ref for preloaded images
+  const preloadedImages = useRef<Map<string, HTMLImageElement>>(new Map());
+
+  // Add this new effect at the start of the component
+  useEffect(() => {
+    // Preload all game images
+    const preloadImages = () => {
+      // Preload billionaire images
+      Object.entries(BILLIONAIRE_IMAGES).forEach(([name, src]) => {
+        const img = new Image();
+        img.src = src;
+        preloadedImages.current.set(name, img);
+      });
+
+      // Preload dino images
+      const dinoClosedImage = new Image();
+      const dinoOpenImage = new Image();
+      dinoClosedImage.src = '/dinomouthclose.png';
+      dinoOpenImage.src = '/dinomouthopen.png';
+      preloadedImages.current.set('dinoClosed', dinoClosedImage);
+      preloadedImages.current.set('dinoOpen', dinoOpenImage);
+    };
+
+    preloadImages();
+  }, []);
 
   // Fetch billionaire data when game starts
   useEffect(() => {
@@ -154,6 +194,19 @@ export default function Game() {
     const canvas = canvasRef.current;
     if (!canvas || gameState !== 'playing' || billionaires.length === 0) return;
 
+    // Random chance to spawn rainbow power-up
+    if (Math.random() < RAINBOW_SPAWN_CHANCE) {
+      const newObject: FallingObject = {
+        id: Date.now(),
+        x: Math.random() * (canvas.width - 50),
+        y: -50,
+        type: 'rainbow',
+        isDragging: false
+      };
+      setObjects(prev => [...prev, newObject]);
+      return;
+    }
+
     // Weight spawn chances by net worth (inverse - richer = rarer)
     const totalNetWorth = billionaires.reduce((sum, b) => sum + b.netWorth, 0);
     const weights = billionaires.map(b => 1 - (b.netWorth / totalNetWorth));
@@ -205,6 +258,11 @@ export default function Game() {
     );
 
     if (hasCollided) {
+      if (obj.type === 'rainbow') {
+        createRainbowEffect(obj.x, obj.y);
+        createParticles(obj.x + 25, obj.y + 25, RAINBOW_COLORS[Math.floor(Math.random() * RAINBOW_COLORS.length)]);
+        return true;
+      }
       createParticles(obj.x + 25, obj.y + 25, '#eab308');
       createMoneyRain(obj.x + 25, obj.y);
     }
@@ -212,26 +270,11 @@ export default function Game() {
     return hasCollided;
   };
 
-  // Define the renderGame function outside of the useEffect
+  // Modify the renderGame function to use preloaded images
   const renderGame = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Create image objects for each billionaire
-    const images = new Map();
-    billionaires.forEach(billionaire => {
-      const img = new Image();
-      img.src = BILLIONAIRE_IMAGES[billionaire.name] || '@fallback-avatar.png';
-      images.set(billionaire.name, img);
-    });
-
-    const dinoClosedImage = new Image();
-    const dinoOpenImage = new Image();
-    dinoClosedImage.src = '/dinomouthclose.png';
-    dinoOpenImage.src = '/dinomouthopen.png';
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -247,15 +290,24 @@ export default function Game() {
       ctx.fillStyle = '#ef4444';
       ctx.fillText(`♥`.repeat(lives), 20, 70);
 
-      // Draw dino
-      const dinoImage = isDinoOpen ? dinoOpenImage : dinoClosedImage;
-      ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
+      // Draw dino using preloaded images
+      const dinoImage = preloadedImages.current.get(isDinoOpen ? 'dinoOpen' : 'dinoClosed');
+      if (dinoImage) {
+        ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
+      }
 
       // Draw falling objects
       objects.forEach(obj => {
-        const img = images.get(obj.type);
-        if (img) {
-          ctx.drawImage(img, obj.x, obj.y, 50, 50);
+        if (obj.type === 'rainbow') {
+          // Draw rainbow emoji
+          ctx.font = '40px Arial';
+          ctx.fillText('🌈', obj.x, obj.y + 40);
+        } else {
+          // Draw billionaire images
+          const img = preloadedImages.current.get(obj.type);
+          if (img) {
+            ctx.drawImage(img, obj.x, obj.y, 50, 50);
+          }
         }
       });
 
@@ -275,6 +327,36 @@ export default function Game() {
         ctx.fillStyle = '#eab308';
         ctx.fillText(money.symbol, money.x, money.y);
       });
+
+      // Render rainbow effects
+      rainbowEffects.forEach(effect => {
+        // Create full-width rainbow gradient
+        const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+        
+        RAINBOW_COLORS.forEach((color, index) => {
+          gradient.addColorStop(index / (RAINBOW_COLORS.length - 1), color);
+        });
+        
+        ctx.globalAlpha = effect.opacity;
+        ctx.fillStyle = gradient;
+        
+        // Draw rising rainbow curtain
+        const curtainHeight = canvas.height - effect.y;
+        ctx.fillRect(0, effect.y, canvas.width, curtainHeight);
+        
+        // Add text
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // Add slight shadow for better visibility
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 4;
+        ctx.fillText(effect.text, canvas.width / 2, effect.y + curtainHeight / 2);
+        ctx.shadowBlur = 0;
+      });
+      ctx.globalAlpha = 1;
     }
 
     requestAnimationFrame(renderGame);
@@ -355,6 +437,15 @@ export default function Game() {
             ...m,
             y: m.y + m.speed
           })).filter(m => m.y < CANVAS_HEIGHT)
+        );
+
+        // Update rainbow effects - increased speed and fade rate
+        setRainbowEffects(prev => 
+          prev.map(effect => ({
+            ...effect,
+            y: effect.y - 20, // Increased from -10 to -20 for faster rising
+            opacity: effect.y < 0 ? effect.opacity - 0.04 : effect.opacity // Faster fade out
+          })).filter(effect => effect.opacity > 0)
         );
 
         renderGame();
@@ -505,6 +596,29 @@ export default function Game() {
       });
     }
     setMoneyRain(prev => [...prev, ...newMoneyParticles]);
+  };
+
+  // Add rainbow effect creation function
+  const createRainbowEffect = (x: number, y: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const newEffect: RainbowEffect = {
+      x: 0, // Start at left edge
+      y: canvas.height, // Start from bottom
+      height: 0,
+      opacity: 1,
+      text: "QUEER AGENDA"
+    };
+    
+    setRainbowEffects(prev => [...prev, newEffect]);
+    
+    // Clear all billionaires except rainbows
+    setObjects(prev => {
+      const billionairesCleared = prev.filter(obj => obj.type !== 'rainbow').length;
+      setScore(s => s + (billionairesCleared * 50));
+      return prev.filter(obj => obj.type === 'rainbow');
+    });
   };
 
   return (
