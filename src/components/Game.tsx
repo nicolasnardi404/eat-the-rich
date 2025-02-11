@@ -18,6 +18,22 @@ export default function Game() {
   const [score, setScore] = useState(0);
   const [gameState, setGameState] = useState<GameState>('start');
   const [lives, setLives] = useState(3);
+  const [level, setLevel] = useState(1);
+  const [spawnInterval, setSpawnInterval] = useState(800);
+  const [dino, setDino] = useState<DinoState>({
+    x: 350,
+    y: 500,
+    isJumping: false,
+    velocity: 0
+  });
+  
+  // Adjust these constants for better jump physics
+  const DINO_SPEED = 12;
+  const JUMP_FORCE = -20;
+  const GRAVITY = 1.2;
+  const GROUND_Y = 500;
+  const CANVAS_HEIGHT = 600;
+  const FALL_SPEED = 4; // New constant for falling speed
 
   // Add a ref to track the mouth closing timeout
   const mouthTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -27,7 +43,38 @@ export default function Game() {
     setScore(0);
     setLives(3);
     setObjects([]);
+    setLevel(1);
+    setSpawnInterval(800);
+    spawnNewObject(); // Immediately spawn first object when game starts
   };
+
+  // Add keyboard controls effect
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.code) {
+        case 'ArrowLeft':
+          setDino(prev => ({
+            ...prev,
+            x: Math.max(0, prev.x - DINO_SPEED)
+          }));
+          break;
+        case 'ArrowRight':
+          setDino(prev => ({
+            ...prev,
+            x: Math.min(700, prev.x + DINO_SPEED)
+          }));
+          break;
+        case 'Space':
+          handleJump();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState, dino.isJumping]);
 
   // Spawn new object function
   const spawnNewObject = () => {
@@ -44,40 +91,155 @@ export default function Game() {
     setObjects(prev => [...prev, newObject]);
   };
 
-  // Game loop effect
+  // Add collision detection helper function
+  const checkCollision = (dino: DinoState, obj: FallingObject) => {
+    // Define collision box for dino and falling object
+    const dinoBox = {
+      x: dino.x + 20, // Adjust hitbox to match dino's mouth
+      y: dino.y + 20,
+      width: 60,
+      height: 60
+    };
+
+    const objBox = {
+      x: obj.x,
+      y: obj.y,
+      width: 50,
+      height: 50
+    };
+
+    return (
+      dinoBox.x < objBox.x + objBox.width &&
+      dinoBox.x + dinoBox.width > objBox.x &&
+      dinoBox.y < objBox.y + objBox.height &&
+      dinoBox.y + dinoBox.height > objBox.y
+    );
+  };
+
+  // Update game loop effect to include collision detection
+  useEffect(() => {
+    if (gameState === 'playing') {
+      const gameLoop = setInterval(() => {
+        // Update falling objects with collision detection
+        setObjects((prevObjects) => {
+          return prevObjects.map((obj) => ({
+            ...obj,
+            y: obj.y + FALL_SPEED,
+          })).filter((obj) => {
+            // Check if object hits dino
+            if (checkCollision(dino, obj)) {
+              setScore(prev => prev + 10); // Add points for catching
+              setIsDinoOpen(true); // Open mouth when eating
+              // Close mouth after a short delay
+              if (mouthTimeoutRef.current) {
+                clearTimeout(mouthTimeoutRef.current);
+              }
+              mouthTimeoutRef.current = setTimeout(() => {
+                setIsDinoOpen(false);
+              }, 200);
+              return false; // Remove eaten object
+            }
+            // Check if object falls off screen
+            if (obj.y >= CANVAS_HEIGHT) {
+              setLives(prev => prev - 1); // Lose a life when missing
+              if (lives <= 1) {
+                setGameState('gameOver');
+              }
+              return false;
+            }
+            return true;
+          });
+        });
+
+        // Update dino physics
+        setDino(prev => {
+          if (!prev.isJumping) return prev;
+          
+          const newVelocity = prev.velocity + GRAVITY;
+          const newY = prev.y + newVelocity;
+
+          // Check ground collision
+          if (newY >= GROUND_Y) {
+            return {
+              ...prev,
+              y: GROUND_Y,
+              isJumping: false,
+              velocity: 0
+            };
+          }
+
+          return {
+            ...prev,
+            y: newY,
+            velocity: newVelocity
+          };
+        });
+      }, 16);
+
+      return () => clearInterval(gameLoop);
+    }
+  }, [gameState, dino, lives]);
+
+  // Spawn timer effect - separate from game loop
+  useEffect(() => {
+    if (gameState === 'playing') {
+      // Initial spawn
+      spawnNewObject();
+      
+      // Regular spawn interval
+      const spawnTimer = setInterval(() => {
+        spawnNewObject();
+      }, spawnInterval);
+
+      return () => clearInterval(spawnTimer);
+    }
+  }, [gameState, spawnInterval]);
+
+  // Add continuous movement for smoother controls
   useEffect(() => {
     if (gameState !== 'playing') return;
 
-    // Spawn interval
-    const spawnInterval = setInterval(spawnNewObject, 2000); // Spawn every 2 seconds
+    const keysPressed = new Set<string>();
 
-    // Falling movement interval
-    const fallInterval = setInterval(() => {
-      setObjects(prev => prev.map(obj => {
-        if (!obj.isDragging) {
-          const newY = obj.y + 2; // Fall speed
-          // Check if object fell off screen
-          if (newY > 600) { // canvas height
-            setLives(prev => {
-              const newLives = prev - 1;
-              if (newLives <= 0) {
-                setGameState('gameOver');
-              }
-              return newLives;
-            });
-            return null; // Remove object
-          }
-          return { ...obj, y: newY };
-        }
-        return obj;
-      }).filter(Boolean) as FallingObject[]);
-    }, 16); // Update every ~16ms (60fps)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      keysPressed.add(e.code);
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      keysPressed.delete(e.code);
+    };
+
+    const moveInterval = setInterval(() => {
+      if (keysPressed.has('ArrowLeft')) {
+        setDino(prev => ({
+          ...prev,
+          x: Math.max(0, prev.x - DINO_SPEED)
+        }));
+      }
+      if (keysPressed.has('ArrowRight')) {
+        setDino(prev => ({
+          ...prev,
+          x: Math.min(700, prev.x + DINO_SPEED)
+        }));
+      }
+      if (keysPressed.has('Space') && !dino.isJumping) {
+        setDino(prev => ({
+          ...prev,
+          isJumping: true,
+          velocity: JUMP_FORCE
+        }));
+      }
+    }, 16);
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
 
     return () => {
-      clearInterval(spawnInterval);
-      clearInterval(fallInterval);
+      clearInterval(moveInterval);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [gameState]);
+  }, [gameState, dino.isJumping]);
 
   // Render effect
   useEffect(() => {
@@ -106,9 +268,9 @@ export default function Game() {
       ctx.fillText(`Score: ${score}`, 20, 40);
       ctx.fillText(`Lives: ${lives}`, 20, 70);
 
-      // Draw dino
+      // Draw dino at its current position
       const dinoImage = isDinoOpen ? dinoOpenImage : dinoClosedImage;
-      ctx.drawImage(dinoImage, 350, 500, 100, 100);
+      ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
 
       // Draw falling objects
       objects.forEach(obj => {
@@ -136,102 +298,12 @@ export default function Game() {
     };
 
     render();
-  }, [objects, isDinoOpen, score, lives, gameState]);
+  }, [objects, isDinoOpen, score, lives, gameState, dino]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (gameState !== 'playing') {
       startGame();
-      return;
     }
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    // Check if we clicked on any falling image
-    const clickedObject = objects.find(obj => {
-      return mouseX >= obj.x && 
-             mouseX <= obj.x + 50 && 
-             mouseY >= obj.y && 
-             mouseY <= obj.y + 50;
-    });
-
-    if (clickedObject) {
-      setDraggedObject(clickedObject);
-      // Stop the object from falling while being dragged
-      setObjects(prev => prev.map(obj =>
-        obj.id === clickedObject.id ? { ...obj, isDragging: true } : obj
-      ));
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggedObject || gameState !== 'playing') return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    // Update dragged object position
-    setObjects(prev => prev.map(obj =>
-      obj.id === draggedObject.id 
-        ? { ...obj, x: mouseX - 25, y: mouseY - 25, isDragging: true } 
-        : obj
-    ));
-
-    // Check if over dino's mouth
-    const dinoMouthX = 350;
-    const dinoMouthY = 500;
-    const isOverMouth = 
-      mouseX >= dinoMouthX && 
-      mouseX <= dinoMouthX + 100 && 
-      mouseY >= dinoMouthY && 
-      mouseY <= dinoMouthY + 100;
-
-    if (isOverMouth) {
-      // Clear any existing timeout
-      if (mouthTimeoutRef.current) {
-        clearTimeout(mouthTimeoutRef.current);
-      }
-
-      // Open mouth
-      setIsDinoOpen(true);
-      
-      // Eat the image immediately when over mouth
-      setObjects(prev => prev.filter(obj => obj.id !== draggedObject.id));
-      setScore(prev => prev + 10);
-      setDraggedObject(null);
-
-      // Optional: Play eating sound
-      try {
-        const eatSound = new Audio('/eat-sound.mp3');
-        eatSound.play().catch(() => {});
-      } catch (error) {
-        console.log('Sound not loaded');
-      }
-
-      // Set timeout to close mouth after eating
-      mouthTimeoutRef.current = setTimeout(() => {
-        setIsDinoOpen(false);
-      }, 200); // Keep mouth open for 500ms after eating
-    }
-  };
-
-  const handleMouseUp = () => {
-    if (!draggedObject) return;
-    
-    // If released and not eaten, just release the object
-    setObjects(prev => prev.map(obj =>
-      obj.id === draggedObject.id ? { ...obj, isDragging: false } : obj
-    ));
-    
-    setDraggedObject(null);
   };
 
   // Cleanup timeout on unmount
@@ -243,6 +315,25 @@ export default function Game() {
     };
   }, []);
 
+  // Update level and spawn interval
+  const updateLevel = () => {
+    const newLevel = Math.floor(score / 100) + 1;
+    setLevel(newLevel);
+    // Make objects spawn faster as level increases, with a minimum of 400ms
+    setSpawnInterval(Math.max(800 - (newLevel - 1) * 50, 400));
+  };
+
+  // Handle jump start
+  const handleJump = () => {
+    if (!dino.isJumping && gameState === 'playing') {
+      setDino(prev => ({
+        ...prev,
+        isJumping: true,
+        velocity: JUMP_FORCE
+      }));
+    }
+  };
+
   return (
     <div className="relative">
       <canvas
@@ -251,8 +342,6 @@ export default function Game() {
         height={600}
         className="border border-gray-400"
         onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
       />
     </div>
   );
