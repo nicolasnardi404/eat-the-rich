@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import Image from 'next/image';
 
 interface FallingObject {
   id: number;
@@ -63,12 +64,10 @@ interface DinoState {
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [objects, setObjects] = useState<FallingObject[]>([]);
-  const [draggedObject, setDraggedObject] = useState<FallingObject | null>(null);
   const [score, setScore] = useState(0);
   const [gameState, setGameState] = useState<GameState>('start');
   const [lives, setLives] = useState(6); // Initialize with 6 internal lives
   const [level, setLevel] = useState(1);
-  const [spawnInterval, setSpawnInterval] = useState(300);
   const [dino, setDino] = useState<DinoState>({
     x: 350,
     y: 500,
@@ -78,7 +77,6 @@ export default function Game() {
   });
   const [billionaires, setBillionaires] = useState<Billionaire[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   
   // Adjust these constants for better game speed
   const DINO_SPEED = 14;
@@ -113,22 +111,6 @@ export default function Game() {
 
   // Add new ref for preloaded images
   const preloadedImages = useRef<Map<string, HTMLImageElement>>(new Map());
-
-  // Replace certain useState hooks with useRef
-  const scoreRef = useRef<number>(0);
-  const livesRef = useRef<number>(3);
-  const objectsRef = useRef<FallingObject[]>([]);
-  const particlesRef = useRef<Particle[]>([]);
-  const moneyRainRef = useRef<MoneyParticle[]>([]);
-  const rainbowEffectsRef = useRef<RainbowEffect[]>([]);
-  const dinoRef = useRef<DinoState>({
-    x: 350,
-    y: 500,
-    isJumping: false,
-    velocity: 0,
-    direction: 'right'
-  });
-
 
   const MAX_MAX_OBJECTS = 8;      // Never allow more than 8 total
 
@@ -310,10 +292,10 @@ export default function Game() {
       window.removeEventListener('keyup', handleKeyUp);
       cancelAnimationFrame(animationId);
     };
-  }, [gameState]);
+  }, [gameState, JUMP_FORCE]);
 
   // Modify spawn new object function to ensure better random placement
-  const spawnNewObject = (xPosition?: number) => {
+  const spawnNewObject = useCallback((xPosition?: number) => {
     const canvas = canvasRef.current;
     if (!canvas || gameState !== 'playing' || billionaires.length === 0) return;
 
@@ -354,10 +336,10 @@ export default function Game() {
       isDragging: false
     };
     setObjects(prev => [...prev, newObject]);
-  };
+  }, [billionaires, gameState]);
 
   // Add collision detection helper function
-  const checkCollision = (dino: DinoState, obj: FallingObject) => {
+  const checkCollision = useCallback((dino: DinoState, obj: FallingObject) => {
     const dinoBox = {
       x: dino.x + 20,
       y: dino.y + 20,
@@ -381,7 +363,7 @@ export default function Game() {
 
     if (hasCollided) {
       if (obj.type === 'rainbow') {
-        createRainbowEffect(obj.x, obj.y);
+        createRainbowEffect();
         createParticles(obj.x + 25, obj.y + 25, RAINBOW_COLORS[Math.floor(Math.random() * RAINBOW_COLORS.length)]);
         return true;
       }
@@ -390,10 +372,10 @@ export default function Game() {
     }
 
     return hasCollided;
-  };
+  }, [RAINBOW_COLORS, createMoneyRain]);
 
   // Modify the renderGame function to use preloaded images
-  const renderGame = () => {
+  const renderGame = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -487,7 +469,7 @@ export default function Game() {
     }
 
     requestAnimationFrame(renderGame);
-  };
+  }, [gameState, objects, score, lives, dino, RAINBOW_COLORS, moneyRain, particles, rainbowEffects]);
 
   // Modify the spawn loop effect to properly clean up
   useEffect(() => {
@@ -543,7 +525,7 @@ export default function Game() {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameState, level, objects, currentSpawnInterval]);
+  }, [gameState, level, objects, currentSpawnInterval, spawnNewObject]);
 
   // Modify the game loop to properly clean up
   useEffect(() => {
@@ -646,7 +628,7 @@ export default function Game() {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameState, dino, lives, billionaires, fallSpeed]);
+  }, [gameState, dino, lives, billionaires, fallSpeed, checkCollision, renderGame]);
 
   // Update the level management
   useEffect(() => {
@@ -675,9 +657,9 @@ export default function Game() {
   // Update render effect with better cleanup
   useEffect(() => {
     renderGame();
-  }, [objects, score, lives, gameState, dino, billionaires]);
+  }, [objects, score, lives, gameState, dino, billionaires, renderGame]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = () => {
     if (gameState !== 'playing') {
       startGame();
     }
@@ -727,13 +709,13 @@ export default function Game() {
   };
 
   // Add rainbow effect creation function
-  const createRainbowEffect = (x: number, y: number) => {
+  const createRainbowEffect = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
+    
     const newEffect: RainbowEffect = {
-      x: 0, // Start at left edge
-      y: canvas.height, // Start from bottom
+      x: 0,
+      y: canvas.height,
       height: 0,
       opacity: 1,
       text: "QUEER AGENDA"
@@ -773,8 +755,6 @@ export default function Game() {
         
         {loading ? (
           <div className="text-emerald-100 text-center p-4">Loading...</div>
-        ) : error ? (
-          <div className="text-red-400 text-center p-4">{error}</div>
         ) : billionaires.length === 0 ? (
           <div className="text-emerald-100 text-center p-4">No data available</div>
         ) : (
@@ -790,14 +770,21 @@ export default function Game() {
               {billionaires.map((billionaire) => (
                 <tr key={billionaire.name} className="border-b border-emerald-700">
                   <td className="px-4 py-2 flex items-center">
-                    <img 
-                      src={BILLIONAIRE_IMAGES[billionaire.name]}
-                      alt={billionaire.name} 
-                      className="w-8 h-8 rounded-full mr-2"
-                      onError={(e) => {
-                        e.currentTarget.src = '@fallback-avatar.png';
-                      }}
-                    />
+                    <div className="relative w-8 h-8">
+                      <Image 
+                        src={BILLIONAIRE_IMAGES[billionaire.name]}
+                        alt={billionaire.name}
+                        fill
+                        className="rounded-full mr-2"
+                        onLoadingComplete={(result) => {
+                          if (result.naturalWidth === 0) {
+                            // Handle error case
+                            result.onerror = null;
+                            result.src = '@fallback-avatar.png';
+                          }
+                        }}
+                      />
+                    </div>
                     {billionaire.name}
                   </td>
                   <td className="px-4 py-2 text-right">
