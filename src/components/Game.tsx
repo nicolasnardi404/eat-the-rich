@@ -17,11 +17,6 @@ interface Billionaire {
   priceToEat: number;
 }
 
-// First, let's define the API response type
-interface BillionaireApiResponse {
-  name: string;
-  netWorth: number;
-}
 
 // Create a mapping for billionaire names to their image files
 const BILLIONAIRE_IMAGES = {
@@ -134,12 +129,8 @@ export default function Game() {
     direction: 'right'
   });
 
-  // Add these constants for difficulty scaling
-  const INITIAL_MIN_OBJECTS = 2;  // Start with just 2 objects
-  const INITIAL_MAX_OBJECTS = 4;  // Maximum of 4 at start
-  const MAX_MIN_OBJECTS = 5;      // Never require more than 5 minimum
+
   const MAX_MAX_OBJECTS = 8;      // Never allow more than 8 total
-  const OBJECTS_INCREASE_INTERVAL = 1000; // Slower progression - every 1000 points
 
   // Updated constants for slower start
   const INITIAL_SPAWN_INTERVAL = 2000;    // Increased from 1200 to 2000ms
@@ -694,9 +685,10 @@ export default function Game() {
 
   // Cleanup timeout on unmount
   useEffect(() => {
+    const currentMouthTimeout = mouthTimeoutRef.current;
     return () => {
-      if (mouthTimeoutRef.current) {
-        clearTimeout(mouthTimeoutRef.current);
+      if (currentMouthTimeout) {
+        clearTimeout(currentMouthTimeout);
       }
     };
   }, []);
