@@ -31,6 +31,23 @@ const BILLIONAIRE_IMAGES = {
   'Donald Trump': '/trumpface.png'
 };
 
+// Add these new interfaces after the existing interfaces
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  color: string;
+}
+
+interface MoneyParticle {
+  x: number;
+  y: number;
+  speed: number;
+  symbol: string;
+}
+
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [objects, setObjects] = useState<FallingObject[]>([]);
@@ -66,6 +83,15 @@ export default function Game() {
   // Add a ref for the animation frame
   const animationFrameRef = useRef<number>();
   const gameLoopIntervalRef = useRef<NodeJS.Timeout>();
+
+  // Add these new state variables in the Game component
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const [moneyRain, setMoneyRain] = useState<MoneyParticle[]>([]);
+
+  // Add these constants with the other game constants
+  const PARTICLE_COUNT = 20;
+  const MONEY_PARTICLE_COUNT = 15;
+  const MONEY_SYMBOLS = ['$', '💵', '💰', '💎'];
 
   // Fetch billionaire data when game starts
   useEffect(() => {
@@ -171,12 +197,19 @@ export default function Game() {
       height: 50
     };
 
-    return (
+    const hasCollided = (
       dinoBox.x < objBox.x + objBox.width &&
       dinoBox.x + dinoBox.width > objBox.x &&
       dinoBox.y < objBox.y + objBox.height &&
       dinoBox.y + dinoBox.height > objBox.y
     );
+
+    if (hasCollided) {
+      createParticles(obj.x + 25, obj.y + 25, '#eab308');
+      createMoneyRain(obj.x + 25, obj.y);
+    }
+
+    return hasCollided;
   };
 
   // Define the renderGame function outside of the useEffect
@@ -224,6 +257,23 @@ export default function Game() {
         if (img) {
           ctx.drawImage(img, obj.x, obj.y, 50, 50);
         }
+      });
+
+      // Render particles
+      particles.forEach((particle) => {
+        ctx.globalAlpha = particle.life;
+        ctx.fillStyle = particle.color;
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Render money rain
+      ctx.globalAlpha = 1;
+      ctx.font = '24px serif';
+      moneyRain.forEach((money) => {
+        ctx.fillStyle = '#eab308';
+        ctx.fillText(money.symbol, money.x, money.y);
       });
     }
 
@@ -288,6 +338,24 @@ export default function Game() {
             velocity: newVelocity
           };
         });
+
+        // Update particles
+        setParticles(prev => 
+          prev.map(p => ({
+            ...p,
+            x: p.x + p.vx,
+            y: p.y + p.vy,
+            life: p.life - 0.02
+          })).filter(p => p.life > 0)
+        );
+
+        // Update money rain
+        setMoneyRain(prev =>
+          prev.map(m => ({
+            ...m,
+            y: m.y + m.speed
+          })).filter(m => m.y < CANVAS_HEIGHT)
+        );
 
         renderGame();
 
@@ -406,6 +474,37 @@ export default function Game() {
 
   const updateGame = () => {
     // Handle game logic such as updating object positions, collision detection, etc.
+  };
+
+  // Add this new function after the existing helper functions
+  const createParticles = (x: number, y: number, color: string = '#eab308') => {
+    const newParticles: Particle[] = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const angle = (Math.PI * 2 * i) / PARTICLE_COUNT;
+      newParticles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * (Math.random() * 5 + 2),
+        vy: Math.sin(angle) * (Math.random() * 5 + 2),
+        life: 1,
+        color
+      });
+    }
+    setParticles(prev => [...prev, ...newParticles]);
+  };
+
+  // Add this function to create money rain effect
+  const createMoneyRain = (x: number, y: number) => {
+    const newMoneyParticles: MoneyParticle[] = [];
+    for (let i = 0; i < MONEY_PARTICLE_COUNT; i++) {
+      newMoneyParticles.push({
+        x: x + Math.random() * 100 - 50,
+        y: y,
+        speed: Math.random() * 3 + 2,
+        symbol: MONEY_SYMBOLS[Math.floor(Math.random() * MONEY_SYMBOLS.length)]
+      });
+    }
+    setMoneyRain(prev => [...prev, ...newMoneyParticles]);
   };
 
   return (
