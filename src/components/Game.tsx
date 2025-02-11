@@ -65,7 +65,7 @@ export default function Game() {
   const [gameState, setGameState] = useState<GameState>('start');
   const [lives, setLives] = useState(3);
   const [level, setLevel] = useState(1);
-  const [spawnInterval, setSpawnInterval] = useState(600);
+  const [spawnInterval, setSpawnInterval] = useState(300);
   const [dino, setDino] = useState<DinoState>({
     x: 350,
     y: 500,
@@ -82,8 +82,8 @@ export default function Game() {
   const GRAVITY = 1.2;
   const GROUND_Y = 500;
   const CANVAS_HEIGHT = 600;
-  const FALL_SPEED = 4; // Increased from 3
-  const SPAWN_INTERVAL = 1000; // Decreased from 1000
+  const FALL_SPEED = 5; // Increased for faster falling
+  const SPAWN_INTERVAL = 300; // Much faster initial spawn rate
 
   // Add a ref to track the mouth closing timeout
   const mouthTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -101,7 +101,7 @@ export default function Game() {
   const PARTICLE_COUNT = 20;
   const MONEY_PARTICLE_COUNT = 15;
   const MONEY_SYMBOLS = ['$', '💵', '💰', '💎'];
-  const RAINBOW_SPAWN_CHANCE = 0.02; // Reduced to 5% chance for rainbow power-up
+  const RAINBOW_SPAWN_CHANCE = 0.05; // Reduced to 2% chance for rainbow power-up
   const RAINBOW_COLORS = [
     '#FF0000', '#FF7F00', '#FFFF00', 
     '#00FF00', '#0000FF', '#4B0082', '#8B00FF'
@@ -123,6 +123,27 @@ export default function Game() {
     isJumping: false,
     velocity: 0
   });
+
+  // Add these constants for difficulty scaling
+  const INITIAL_MIN_OBJECTS = 2;  // Start with just 2 objects
+  const INITIAL_MAX_OBJECTS = 4;  // Maximum of 4 at start
+  const MAX_MIN_OBJECTS = 5;      // Never require more than 5 minimum
+  const MAX_MAX_OBJECTS = 8;      // Never allow more than 8 total
+  const OBJECTS_INCREASE_INTERVAL = 1000; // Slower progression - every 1000 points
+
+  // Updated constants for slower start
+  const INITIAL_SPAWN_INTERVAL = 2000;    // Increased from 1200 to 2000ms
+  const MIN_SPAWN_INTERVAL = 800;         // Increased from 600 to 800ms
+  const SPAWN_INTERVAL_DECREASE = 40;     // Decreased from 50 to 40 (slower progression)
+  const FALL_SPEED_INITIAL = 2;          // Decreased from 3 to 2
+  const FALL_SPEED_INCREASE = 0.15;      // Decreased from 0.2 to 0.15 (more gradual)
+  const MAX_FALL_SPEED = 6;              // Decreased from 7 to 6
+  const LEVEL_SCORE_REQUIREMENT = 250;    // Increased from 200 to 250 (longer levels)
+
+  // Add these new state variables
+  const [fallSpeed, setFallSpeed] = useState(FALL_SPEED_INITIAL);
+  const [currentSpawnInterval, setCurrentSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
+  const lastSpawnTime = useRef(0);
 
   // Add this new effect at the start of the component
   useEffect(() => {
@@ -193,7 +214,7 @@ export default function Game() {
     setScore(0);
     setLives(3);
     setLevel(1);
-    setSpawnInterval(600);
+    setSpawnInterval(300); // Start with faster spawns
     setObjects([]);
     
     spawnNewObject(); // Immediately spawn first object when game starts
@@ -285,8 +306,8 @@ export default function Game() {
     };
   }, [gameState]);
 
-  // Spawn new object function
-  const spawnNewObject = () => {
+  // Modify spawn new object function to ensure better random placement
+  const spawnNewObject = (xPosition?: number) => {
     const canvas = canvasRef.current;
     if (!canvas || gameState !== 'playing' || billionaires.length === 0) return;
 
@@ -294,8 +315,8 @@ export default function Game() {
     if (Math.random() < RAINBOW_SPAWN_CHANCE) {
       const newObject: FallingObject = {
         id: Date.now(),
-        x: Math.random() * (canvas.width - 50),
-        y: -50,
+        x: xPosition ?? Math.random() * (canvas.width - 50),
+        y: -50 - (Math.random() * 100),
         type: 'rainbow',
         isDragging: false
       };
@@ -321,8 +342,8 @@ export default function Game() {
 
     const newObject: FallingObject = {
       id: Date.now(),
-      x: Math.random() * (canvas.width - 50),
-      y: -50,
+      x: xPosition ?? Math.random() * (canvas.width - 50),
+      y: -50 - (Math.random() * 100),
       type: selectedBillionaire.name,
       isDragging: false
     };
@@ -471,7 +492,7 @@ export default function Game() {
         setObjects((prevObjects) => {
           return prevObjects.map((obj) => ({
             ...obj,
-            y: obj.y + FALL_SPEED,
+            y: obj.y + fallSpeed,
           })).filter((obj) => {
             // Check if object hits dino
             if (checkCollision(dino, obj)) {
@@ -561,22 +582,80 @@ export default function Game() {
         }
       };
     }
-  }, [gameState, dino, lives, billionaires]);
+  }, [gameState, dino, lives, billionaires, fallSpeed]);
 
-  // Spawn timer effect - separate from game loop
+  // Replace the spawn timer effect with this improved version
   useEffect(() => {
-    if (gameState === 'playing') {
-      // Initial spawn
-      spawnNewObject();
-      
-      // Regular spawn interval
-      const spawnTimer = setInterval(() => {
-        spawnNewObject();
-      }, spawnInterval);
+    if (gameState !== 'playing') return;
 
-      return () => clearInterval(spawnTimer);
+    const spawnLoop = (timestamp: number) => {
+      if (timestamp - lastSpawnTime.current >= currentSpawnInterval) {
+        const currentObjects = objects.filter(obj => obj.type !== 'rainbow').length;
+        
+        // Calculate how many objects we should have based on level
+        const targetObjects = Math.min(
+          Math.floor(level * 1.5) + 1, // Gradual increase
+          MAX_MAX_OBJECTS
+        );
+
+        if (currentObjects < targetObjects) {
+          // Spawn object with position distribution
+          const canvas = canvasRef.current;
+          if (canvas) {
+            // Divide canvas into sections for better distribution
+            const sections = targetObjects;
+            const sectionWidth = canvas.width / sections;
+            const availableSections = Array.from({ length: sections }, (_, i) => i)
+              .filter(section => {
+                const sectionX = section * sectionWidth;
+                return !objects.some(obj => 
+                  obj.x >= sectionX && obj.x < sectionX + sectionWidth
+                );
+              });
+
+            if (availableSections.length > 0) {
+              const randomSection = availableSections[Math.floor(Math.random() * availableSections.length)];
+              const baseX = randomSection * sectionWidth;
+              const randomOffset = Math.random() * (sectionWidth - 50); // 50 is object width
+              spawnNewObject(baseX + randomOffset);
+            }
+          }
+        }
+        lastSpawnTime.current = timestamp;
+      }
+
+      if (gameState === 'playing') {
+        requestAnimationFrame(spawnLoop);
+      }
+    };
+
+    const animationId = requestAnimationFrame(spawnLoop);
+    return () => cancelAnimationFrame(animationId);
+  }, [gameState, level, objects, currentSpawnInterval]);
+
+  // Update the level management
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    const newLevel = Math.floor(score / LEVEL_SCORE_REQUIREMENT) + 1;
+    if (newLevel !== level) {
+      setLevel(newLevel);
+      
+      // Update spawn interval
+      const newSpawnInterval = Math.max(
+        INITIAL_SPAWN_INTERVAL - (newLevel - 1) * SPAWN_INTERVAL_DECREASE,
+        MIN_SPAWN_INTERVAL
+      );
+      setCurrentSpawnInterval(newSpawnInterval);
+
+      // Update fall speed
+      const newFallSpeed = Math.min(
+        FALL_SPEED_INITIAL + (newLevel - 1) * FALL_SPEED_INCREASE,
+        MAX_FALL_SPEED
+      );
+      setFallSpeed(newFallSpeed);
     }
-  }, [gameState, spawnInterval]);
+  }, [score, gameState]);
 
   // Update render effect with better cleanup
   useEffect(() => {
@@ -597,14 +676,6 @@ export default function Game() {
       }
     };
   }, []);
-
-  // Update level and spawn interval
-  const updateLevel = () => {
-    const newLevel = Math.floor(score / 100) + 1;
-    setLevel(newLevel);
-    // Make objects spawn faster as level increases, with a minimum of 300ms
-    setSpawnInterval(Math.max(600 - (newLevel - 1) * 50, 300)); // Adjusted from 800/400
-  };
 
   // Add this new function after the existing helper functions
   const createParticles = (x: number, y: number, color: string = '#eab308') => {
