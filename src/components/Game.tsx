@@ -38,6 +38,10 @@ export default function Game() {
   // Add a ref to track the mouth closing timeout
   const mouthTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Add a ref for the animation frame
+  const animationFrameRef = useRef<number>();
+  const gameLoopIntervalRef = useRef<NodeJS.Timeout>();
+
   const startGame = () => {
     setGameState('playing');
     setScore(0);
@@ -241,7 +245,7 @@ export default function Game() {
     };
   }, [gameState, dino.isJumping]);
 
-  // Render effect
+  // Update render effect with better cleanup
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -262,36 +266,26 @@ export default function Game() {
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw score and lives
-      ctx.font = '24px Arial';
-      ctx.fillStyle = 'black';
-      ctx.fillText(`Score: ${score}`, 20, 40);
-      ctx.fillText(`Lives: ${lives}`, 20, 70);
+      // Add money-themed background
+      ctx.fillStyle = '#065f46';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      if (gameState === 'playing') {
+        // Draw score and lives
+        ctx.font = 'bold 24px serif';
+        ctx.fillStyle = '#eab308';
+        ctx.fillText(`$${score}`, 20, 40);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillText(`♥`.repeat(lives), 20, 70);
 
-      // Draw dino at its current position
-      const dinoImage = isDinoOpen ? dinoOpenImage : dinoClosedImage;
-      ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
+        // Draw dino and objects
+        const dinoImage = isDinoOpen ? dinoOpenImage : dinoClosedImage;
+        ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
 
-      // Draw falling objects
-      objects.forEach(obj => {
-        const image = obj.type === 'trump' ? trumpImage : elonImage;
-        ctx.drawImage(image, obj.x, obj.y, 50, 50);
-      });
-
-      // Draw game state screens
-      if (gameState === 'start') {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.font = '48px Arial';
-        ctx.fillText('Click to Start', canvas.width/2 - 120, canvas.height/2);
-      } else if (gameState === 'gameOver') {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.font = '48px Arial';
-        ctx.fillText('Game Over!', canvas.width/2 - 120, canvas.height/2);
-        ctx.fillText(`Score: ${score}`, canvas.width/2 - 80, canvas.height/2 + 60);
+        objects.forEach(obj => {
+          const image = obj.type === 'trump' ? trumpImage : elonImage;
+          ctx.drawImage(image, obj.x, obj.y, 50, 50);
+        });
       }
 
       requestAnimationFrame(render);
@@ -335,14 +329,52 @@ export default function Game() {
   };
 
   return (
-    <div className="relative">
-      <canvas
-        ref={canvasRef}
-        width={800}
-        height={600}
-        className="border border-gray-400"
-        onMouseDown={handleMouseDown}
-      />
+    <div className="min-h-screen bg-emerald-900 flex flex-col items-center justify-center p-8">
+      <h1 className="text-6xl font-bold mb-8 text-yellow-500 font-serif tracking-wider">
+        Eat The Rich
+      </h1>
+      
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={800}
+          height={600}
+          className="border-4 border-yellow-500 rounded-lg shadow-lg bg-emerald-800"
+          onClick={handleMouseDown}
+        />
+        
+        {/* Single game state overlay */}
+        {gameState === 'start' && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center">
+            <h2 className="text-yellow-500 text-4xl mb-4">Ready to eat?</h2>
+            <button 
+              onClick={startGame}
+              className="mt-4 px-6 py-2 bg-emerald-700 text-yellow-500 rounded-lg hover:bg-emerald-600 transition"
+            >
+              Start Game
+            </button>
+          </div>
+        )}
+        
+        {gameState === 'gameOver' && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center">
+            <h2 className="text-red-500 text-4xl mb-4">Game Over!</h2>
+            <p className="text-yellow-500 text-2xl">You consumed ${score} worth!</p>
+            <button 
+              onClick={startGame}
+              className="mt-4 px-6 py-2 bg-emerald-700 text-yellow-500 rounded-lg hover:bg-emerald-600 transition"
+            >
+              Eat Again
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {/* Instructions */}
+      <div className="mt-6 text-emerald-400 text-center">
+        <p className="mb-2">Use ← → to move | SPACE to jump</p>
+        <p>Catch the billionaires before they escape!</p>
+      </div>
     </div>
   );
 }
