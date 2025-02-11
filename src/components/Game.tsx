@@ -71,7 +71,7 @@ export default function Game() {
   const [draggedObject, setDraggedObject] = useState<FallingObject | null>(null);
   const [score, setScore] = useState(0);
   const [gameState, setGameState] = useState<GameState>('start');
-  const [lives, setLives] = useState(3);
+  const [lives, setLives] = useState(6); // Initialize with 6 internal lives
   const [level, setLevel] = useState(1);
   const [spawnInterval, setSpawnInterval] = useState(300);
   const [dino, setDino] = useState<DinoState>({
@@ -223,7 +223,7 @@ export default function Game() {
     // Start the game loop
     setGameState('playing');
     setScore(0);
-    setLives(3);
+    setLives(6); // Reset to 6 internal lives
     setLevel(1);
     setSpawnInterval(300); // Start with faster spawns
     setObjects([]);
@@ -422,9 +422,9 @@ export default function Game() {
       // Draw score and lives
       ctx.font = 'bold 24px serif';
       ctx.fillStyle = '#eab308';
-      ctx.fillText(`$${score}`, 20, 40);
+      ctx.fillText(`$${score}`, 20, 40); // Display full score
       ctx.fillStyle = '#ef4444';
-      ctx.fillText(`♥`.repeat(lives), 20, 70);
+      ctx.fillText(`♥`.repeat(Math.floor(lives / 2)), 20, 70); // Display half the lives as hearts
 
       // Draw dino using direction
       const dinoImage = preloadedImages.current.get(dino.direction === 'right' ? 'dinoRight' : 'dinoLeft');
@@ -561,26 +561,33 @@ export default function Game() {
 
     const gameLoop = () => {
       setObjects((prevObjects) => {
-        return prevObjects.map((obj) => ({
-          ...obj,
-          y: obj.y + fallSpeed,
-        })).filter((obj) => {
-          if (checkCollision(dino, obj)) {
+        return prevObjects.map((obj) => {
+          if (obj.processed) return obj; // Skip already processed objects
+
+          const newY = obj.y + fallSpeed;
+          const hasCollided = checkCollision(dino, obj);
+
+          if (hasCollided) {
             const billionaire = billionaires.find(b => b.name === obj.type);
             if (billionaire) {
-              setScore(prev => prev + billionaire.priceToEat);
+              setScore(prev => prev + Math.floor(billionaire.priceToEat / 2)); // Add half the points
             }
-            return false;
+            return { ...obj, processed: true }; // Mark as processed
           }
-          if (obj.y >= CANVAS_HEIGHT) {
-            setLives(prev => prev - 1);
-            if (lives <= 1) {
-              setGameState('gameOver');
-            }
-            return false;
+
+          if (newY >= CANVAS_HEIGHT) {
+            setLives(prevLives => {
+              const newLives = prevLives - 1;
+              if (newLives <= 0) {
+                setGameState('gameOver');
+              }
+              return newLives;
+            });
+            return { ...obj, processed: true }; // Mark as processed
           }
-          return true;
-        });
+
+          return { ...obj, y: newY };
+        }).filter(obj => !obj.processed); // Remove processed objects
       });
 
       // Update dino physics
@@ -759,7 +766,7 @@ export default function Game() {
       setObjects([]);
       setScore(0);
       setLevel(1);
-      setLives(3);
+      setLives(6); // Reset to 6 internal lives
     };
   }, []);
 
@@ -839,13 +846,14 @@ export default function Game() {
         {gameState === 'gameOver' && (
           <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center">
             <h2 className="text-red-500 text-4xl mb-4">Game Over!</h2>
-            <p className="text-yellow-500 text-2xl">You consumed ${score} worth!</p>
-            <button 
-              onClick={startGame}
-              className="mt-4 px-6 py-2 bg-emerald-700 text-yellow-500 rounded-lg hover:bg-emerald-600 transition"
-            >
-              Eat Again
-            </button>
+            <p className="text-yellow-500 text-center">
+              <button 
+                onClick={startGame}
+                className="mt-4 px-6 py-2 bg-emerald-700 text-yellow-500 rounded-lg hover:bg-emerald-600 transition"
+              >
+                Eat Again
+              </button>
+            </p>
           </div>
         )}
       </div>
