@@ -56,11 +56,19 @@ interface RainbowEffect {
   text: string;
 }
 
+// Simplify DinoState interface
+interface DinoState {
+  x: number;
+  y: number;
+  isJumping: boolean;
+  velocity: number;
+  direction: 'left' | 'right';
+}
+
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [objects, setObjects] = useState<FallingObject[]>([]);
   const [draggedObject, setDraggedObject] = useState<FallingObject | null>(null);
-  const [isDinoOpen, setIsDinoOpen] = useState(false);
   const [score, setScore] = useState(0);
   const [gameState, setGameState] = useState<GameState>('start');
   const [lives, setLives] = useState(3);
@@ -70,7 +78,8 @@ export default function Game() {
     x: 350,
     y: 500,
     isJumping: false,
-    velocity: 0
+    velocity: 0,
+    direction: 'right'
   });
   const [billionaires, setBillionaires] = useState<Billionaire[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +130,8 @@ export default function Game() {
     x: 350,
     y: 500,
     isJumping: false,
-    velocity: 0
+    velocity: 0,
+    direction: 'right'
   });
 
   // Add these constants for difficulty scaling
@@ -147,7 +157,6 @@ export default function Game() {
 
   // Add this new effect at the start of the component
   useEffect(() => {
-    // Preload all game images
     const preloadImages = () => {
       // Preload billionaire images
       Object.entries(BILLIONAIRE_IMAGES).forEach(([name, src]) => {
@@ -156,13 +165,15 @@ export default function Game() {
         preloadedImages.current.set(name, img);
       });
 
-      // Preload dino images
-      const dinoClosedImage = new Image();
-      const dinoOpenImage = new Image();
-      dinoClosedImage.src = '/dinomouthclose.png';
-      dinoOpenImage.src = '/dinomouthopen.png';
-      preloadedImages.current.set('dinoClosed', dinoClosedImage);
-      preloadedImages.current.set('dinoOpen', dinoOpenImage);
+      // Only preload left and right dino images
+      const dinoLeft = new Image();
+      const dinoRight = new Image();
+      
+      dinoLeft.src = '/dinomouthopen2.png';      // Dino facing left
+      dinoRight.src = '/dinomouthopen2right.png'; // Dino facing right
+      
+      preloadedImages.current.set('dinoLeft', dinoLeft);
+      preloadedImages.current.set('dinoRight', dinoRight);
     };
 
     preloadImages();
@@ -205,9 +216,9 @@ export default function Game() {
       x: 350,
       y: 500,
       isJumping: false,
-      velocity: 0
+      velocity: 0,
+      direction: 'right'
     });
-    setIsDinoOpen(false);
     
     // Start the game loop
     setGameState('playing');
@@ -256,13 +267,16 @@ export default function Game() {
         let newY = prev.y;
         let newVelocity = prev.velocity;
         let newIsJumping = prev.isJumping;
+        let newDirection = prev.direction;
 
         // Handle horizontal movement
         if (keysPressed.has('ArrowLeft')) {
           newX = Math.max(0, newX - frameAdjustedSpeed);
+          newDirection = 'left';
         }
         if (keysPressed.has('ArrowRight')) {
           newX = Math.min(700, newX + frameAdjustedSpeed);
+          newDirection = 'right';
         }
 
         // Handle jumping physics
@@ -285,7 +299,8 @@ export default function Game() {
           x: newX,
           y: newY,
           velocity: newVelocity,
-          isJumping: newIsJumping
+          isJumping: newIsJumping,
+          direction: newDirection
         };
       });
 
@@ -352,9 +367,8 @@ export default function Game() {
 
   // Add collision detection helper function
   const checkCollision = (dino: DinoState, obj: FallingObject) => {
-    // Define collision box for dino and falling object
     const dinoBox = {
-      x: dino.x + 20, // Adjust hitbox to match dino's mouth
+      x: dino.x + 20,
       y: dino.y + 20,
       width: 60,
       height: 60
@@ -412,8 +426,8 @@ export default function Game() {
       ctx.fillStyle = '#ef4444';
       ctx.fillText(`♥`.repeat(lives), 20, 70);
 
-      // Draw dino using preloaded images
-      const dinoImage = preloadedImages.current.get(isDinoOpen ? 'dinoOpen' : 'dinoClosed');
+      // Draw dino using direction
+      const dinoImage = preloadedImages.current.get(dino.direction === 'right' ? 'dinoRight' : 'dinoLeft');
       if (dinoImage) {
         ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
       }
@@ -551,19 +565,11 @@ export default function Game() {
           ...obj,
           y: obj.y + fallSpeed,
         })).filter((obj) => {
-          // Check if object hits dino
           if (checkCollision(dino, obj)) {
             const billionaire = billionaires.find(b => b.name === obj.type);
             if (billionaire) {
               setScore(prev => prev + billionaire.priceToEat);
             }
-            setIsDinoOpen(true);
-            if (mouthTimeoutRef.current) {
-              clearTimeout(mouthTimeoutRef.current);
-            }
-            mouthTimeoutRef.current = setTimeout(() => {
-              setIsDinoOpen(false);
-            }, 200);
             return false;
           }
           if (obj.y >= CANVAS_HEIGHT) {
@@ -671,7 +677,7 @@ export default function Game() {
   // Update render effect with better cleanup
   useEffect(() => {
     renderGame();
-  }, [objects, isDinoOpen, score, lives, gameState, dino, billionaires]);
+  }, [objects, score, lives, gameState, dino, billionaires]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (gameState !== 'playing') {
