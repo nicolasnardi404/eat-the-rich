@@ -51,13 +51,14 @@ export default function Game() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Adjust these constants for better jump physics
-  const DINO_SPEED = 12;
+  // Adjust these constants for better game speed
+  const DINO_SPEED = 14; // Adjust dino speed
   const JUMP_FORCE = -20;
   const GRAVITY = 1.2;
   const GROUND_Y = 500;
   const CANVAS_HEIGHT = 600;
-  const FALL_SPEED = 4; // New constant for falling speed
+  const FALL_SPEED = 3; // Adjust falling speed
+  const SPAWN_INTERVAL = 1000; // Adjust spawn interval
 
   // Add a ref to track the mouth closing timeout
   const mouthTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -112,9 +113,10 @@ export default function Game() {
           }));
           break;
         case 'Space':
+          e.preventDefault(); // Prevent the default spacebar action
           handleJump();
           break;
-      }
+      } 
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -177,10 +179,61 @@ export default function Game() {
     );
   };
 
-  // Update game loop effect to include collision detection
+  // Define the renderGame function outside of the useEffect
+  const renderGame = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Create image objects for each billionaire
+    const images = new Map();
+    billionaires.forEach(billionaire => {
+      const img = new Image();
+      img.src = BILLIONAIRE_IMAGES[billionaire.name] || '@fallback-avatar.png';
+      images.set(billionaire.name, img);
+    });
+
+    const dinoClosedImage = new Image();
+    const dinoOpenImage = new Image();
+    dinoClosedImage.src = '/dinomouthclose.png';
+    dinoOpenImage.src = '/dinomouthopen.png';
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Add money-themed background
+    ctx.fillStyle = '#065f46';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    if (gameState === 'playing') {
+      // Draw score and lives
+      ctx.font = 'bold 24px serif';
+      ctx.fillStyle = '#eab308';
+      ctx.fillText(`$${score}`, 20, 40);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillText(`♥`.repeat(lives), 20, 70);
+
+      // Draw dino
+      const dinoImage = isDinoOpen ? dinoOpenImage : dinoClosedImage;
+      ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
+
+      // Draw falling objects
+      objects.forEach(obj => {
+        const img = images.get(obj.type);
+        if (img) {
+          ctx.drawImage(img, obj.x, obj.y, 50, 50);
+        }
+      });
+    }
+
+    requestAnimationFrame(renderGame);
+  };
+
+  // Update game loop effect to ensure continuous running
   useEffect(() => {
     if (gameState === 'playing') {
-      const gameLoop = setInterval(() => {
+      const gameLoop = () => {
         // Update falling objects with collision detection
         setObjects((prevObjects) => {
           return prevObjects.map((obj) => ({
@@ -191,22 +244,19 @@ export default function Game() {
             if (checkCollision(dino, obj)) {
               const billionaire = billionaires.find(b => b.name === obj.type);
               if (billionaire) {
-                // Use priceToEat for scoring instead of net worth
                 setScore(prev => prev + billionaire.priceToEat);
               }
-              setIsDinoOpen(true); // Open mouth when eating
-              // Close mouth after a short delay
+              setIsDinoOpen(true);
               if (mouthTimeoutRef.current) {
                 clearTimeout(mouthTimeoutRef.current);
               }
               mouthTimeoutRef.current = setTimeout(() => {
                 setIsDinoOpen(false);
               }, 200);
-              return false; // Remove eaten object
+              return false;
             }
-            // Check if object falls off screen
             if (obj.y >= CANVAS_HEIGHT) {
-              setLives(prev => prev - 1); // Lose a life when missing
+              setLives(prev => prev - 1);
               if (lives <= 1) {
                 setGameState('gameOver');
               }
@@ -223,7 +273,6 @@ export default function Game() {
           const newVelocity = prev.velocity + GRAVITY;
           const newY = prev.y + newVelocity;
 
-          // Check ground collision
           if (newY >= GROUND_Y) {
             return {
               ...prev,
@@ -239,9 +288,19 @@ export default function Game() {
             velocity: newVelocity
           };
         });
-      }, 16);
 
-      return () => clearInterval(gameLoop);
+        renderGame();
+
+        animationFrameRef.current = requestAnimationFrame(gameLoop);
+      };
+
+      animationFrameRef.current = requestAnimationFrame(gameLoop);
+
+      return () => {
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+      };
     }
   }, [gameState, dino, lives, billionaires]);
 
@@ -308,57 +367,7 @@ export default function Game() {
 
   // Update render effect with better cleanup
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Create image objects for each billionaire
-    const images = new Map();
-    billionaires.forEach(billionaire => {
-      const img = new Image();
-      img.src = BILLIONAIRE_IMAGES[billionaire.name] || '@fallback-avatar.png';
-      images.set(billionaire.name, img);
-    });
-
-    const dinoClosedImage = new Image();
-    const dinoOpenImage = new Image();
-    dinoClosedImage.src = '/dinomouthclose.png';
-    dinoOpenImage.src = '/dinomouthopen.png';
-
-    const render = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Add money-themed background
-      ctx.fillStyle = '#065f46';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      if (gameState === 'playing') {
-        // Draw score and lives
-        ctx.font = 'bold 24px serif';
-        ctx.fillStyle = '#eab308';
-        ctx.fillText(`$${score}`, 20, 40);
-        ctx.fillStyle = '#ef4444';
-        ctx.fillText(`♥`.repeat(lives), 20, 70);
-
-        // Draw dino
-        const dinoImage = isDinoOpen ? dinoOpenImage : dinoClosedImage;
-        ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
-
-        // Draw falling objects
-        objects.forEach(obj => {
-          const img = images.get(obj.type);
-          if (img) {
-            ctx.drawImage(img, obj.x, obj.y, 50, 50);
-          }
-        });
-      }
-
-      requestAnimationFrame(render);
-    };
-
-    render();
+    renderGame();
   }, [objects, isDinoOpen, score, lives, gameState, dino, billionaires]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -393,6 +402,10 @@ export default function Game() {
         velocity: JUMP_FORCE
       }));
     }
+  };
+
+  const updateGame = () => {
+    // Handle game logic such as updating object positions, collision detection, etc.
   };
 
   return (
