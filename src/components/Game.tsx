@@ -10,6 +10,28 @@ interface FallingObject {
   isDragging: boolean;
 }
 
+interface Billionaire {
+  name: string;
+  netWorth: number;
+  image: string;
+  company: string;
+  lastUpdated: string;
+}
+
+interface BillionaireData {
+  name: string;
+  netWorth: number;
+  image: string;
+  company: string;
+  lastUpdated: string;
+}
+
+// First, let's define the API response type
+interface BillionaireApiResponse {
+  name: string;
+  netWorth: number;
+}
+
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [objects, setObjects] = useState<FallingObject[]>([]);
@@ -26,6 +48,9 @@ export default function Game() {
     isJumping: false,
     velocity: 0
   });
+  const [billionaires, setBillionaires] = useState<Billionaire[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Adjust these constants for better jump physics
   const DINO_SPEED = 12;
@@ -41,6 +66,38 @@ export default function Game() {
   // Add a ref for the animation frame
   const animationFrameRef = useRef<number>();
   const gameLoopIntervalRef = useRef<NodeJS.Timeout>();
+
+  // Fetch billionaire data
+  useEffect(() => {
+    const fetchBillionaires = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/billionaires');
+        
+        if (!response.ok) {
+          throw new Error(`API responded with status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Ensure data is an array
+        if (Array.isArray(data)) {
+          setBillionaires(data);
+        } else if (data.error) {
+          setError(data.error);
+        } else {
+          setError('Invalid data format received');
+        }
+      } catch (error) {
+        console.error('Failed to fetch billionaire data:', error);
+        setError(error instanceof Error ? error.message : 'Failed to fetch data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBillionaires();
+  }, []);
 
   const startGame = () => {
     setGameState('playing');
@@ -333,6 +390,49 @@ export default function Game() {
       <h1 className="text-6xl font-bold mb-8 text-yellow-500 font-serif tracking-wider">
         Eat The Rich
       </h1>
+      
+      <div className="mb-6 bg-emerald-800 p-4 rounded-lg border-2 border-yellow-500">
+        <h2 className="text-yellow-500 text-2xl mb-3 text-center">High-Value Targets</h2>
+        
+        {loading ? (
+          <div className="text-emerald-100 text-center p-4">Loading...</div>
+        ) : error ? (
+          <div className="text-red-400 text-center p-4">{error}</div>
+        ) : billionaires.length === 0 ? (
+          <div className="text-emerald-100 text-center p-4">No data available</div>
+        ) : (
+          <table className="w-full text-emerald-100">
+            <thead>
+              <tr className="border-b border-emerald-600">
+                <th className="px-4 py-2 text-left">Target</th>
+                <th className="px-4 py-2 text-left">Company</th>
+                <th className="px-4 py-2 text-right">Net Worth</th>
+              </tr>
+            </thead>
+            <tbody>
+              {billionaires.map((billionaire) => (
+                <tr key={billionaire.name} className="border-b border-emerald-700">
+                  <td className="px-4 py-2 flex items-center">
+                    <img 
+                      src={billionaire.image || '/fallback-avatar.png'} 
+                      alt={billionaire.name} 
+                      className="w-8 h-8 rounded-full mr-2"
+                      onError={(e) => {
+                        e.currentTarget.src = '/fallback-avatar.png';
+                      }}
+                    />
+                    {billionaire.name}
+                  </td>
+                  <td className="px-4 py-2">{billionaire.company}</td>
+                  <td className="px-4 py-2 text-right">
+                    ${(billionaire.netWorth / 1000000000).toFixed(1)}B
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
       
       <div className="relative">
         <canvas
