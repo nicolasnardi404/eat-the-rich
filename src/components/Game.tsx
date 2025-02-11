@@ -6,7 +6,7 @@ interface FallingObject {
   id: number;
   x: number;
   y: number;
-  type: 'trump' | 'elon';
+  type: 'elon' | 'bezos' | 'zuck' | 'trump';
   isDragging: boolean;
 }
 
@@ -14,16 +14,7 @@ interface Billionaire {
   name: string;
   netWorth: number;
   image: string;
-  company: string;
-  lastUpdated: string;
-}
-
-interface BillionaireData {
-  name: string;
-  netWorth: number;
-  image: string;
-  company: string;
-  lastUpdated: string;
+  priceToEat: number;
 }
 
 // First, let's define the API response type
@@ -31,6 +22,14 @@ interface BillionaireApiResponse {
   name: string;
   netWorth: number;
 }
+
+// Create a mapping for billionaire names to their image files
+const BILLIONAIRE_IMAGES = {
+  'Elon Musk': '/elonmuskface.png',
+  'Jeff Bezos': '/jeffbezosface.png',
+  'Mark Zuckerberg': '/markzuckface.png',
+  'Donald Trump': '/trumpface.png'
+};
 
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -67,31 +66,16 @@ export default function Game() {
   const animationFrameRef = useRef<number>();
   const gameLoopIntervalRef = useRef<NodeJS.Timeout>();
 
-  // Fetch billionaire data
+  // Fetch billionaire data when game starts
   useEffect(() => {
     const fetchBillionaires = async () => {
       try {
-        setLoading(true);
         const response = await fetch('/api/billionaires');
-        
-        if (!response.ok) {
-          throw new Error(`API responded with status: ${response.status}`);
-        }
-        
         const data = await response.json();
-        
-        // Ensure data is an array
-        if (Array.isArray(data)) {
-          setBillionaires(data);
-        } else if (data.error) {
-          setError(data.error);
-        } else {
-          setError('Invalid data format received');
-        }
+        setBillionaires(data);
+        setLoading(false);
       } catch (error) {
         console.error('Failed to fetch billionaire data:', error);
-        setError(error instanceof Error ? error.message : 'Failed to fetch data');
-      } finally {
         setLoading(false);
       }
     };
@@ -140,13 +124,29 @@ export default function Game() {
   // Spawn new object function
   const spawnNewObject = () => {
     const canvas = canvasRef.current;
-    if (!canvas || gameState !== 'playing') return;
+    if (!canvas || gameState !== 'playing' || billionaires.length === 0) return;
+
+    // Weight spawn chances by net worth (inverse - richer = rarer)
+    const totalNetWorth = billionaires.reduce((sum, b) => sum + b.netWorth, 0);
+    const weights = billionaires.map(b => 1 - (b.netWorth / totalNetWorth));
+    const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+    
+    let random = Math.random() * totalWeight;
+    let selectedBillionaire = billionaires[0];
+    
+    for (let i = 0; i < weights.length; i++) {
+      if (random <= weights[i]) {
+        selectedBillionaire = billionaires[i];
+        break;
+      }
+      random -= weights[i];
+    }
 
     const newObject: FallingObject = {
       id: Date.now(),
-      x: Math.random() * (canvas.width - 50), // Random x position
-      y: -50, // Start above the canvas
-      type: Math.random() > 0.5 ? 'trump' : 'elon',
+      x: Math.random() * (canvas.width - 50),
+      y: -50,
+      type: selectedBillionaire.name,
       isDragging: false
     };
     setObjects(prev => [...prev, newObject]);
@@ -189,7 +189,11 @@ export default function Game() {
           })).filter((obj) => {
             // Check if object hits dino
             if (checkCollision(dino, obj)) {
-              setScore(prev => prev + 10); // Add points for catching
+              const billionaire = billionaires.find(b => b.name === obj.type);
+              if (billionaire) {
+                // Use priceToEat for scoring instead of net worth
+                setScore(prev => prev + billionaire.priceToEat);
+              }
               setIsDinoOpen(true); // Open mouth when eating
               // Close mouth after a short delay
               if (mouthTimeoutRef.current) {
@@ -239,7 +243,7 @@ export default function Game() {
 
       return () => clearInterval(gameLoop);
     }
-  }, [gameState, dino, lives]);
+  }, [gameState, dino, lives, billionaires]);
 
   // Spawn timer effect - separate from game loop
   useEffect(() => {
@@ -305,18 +309,21 @@ export default function Game() {
   // Update render effect with better cleanup
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const trumpImage = new Image();
-    const elonImage = new Image();
+    // Create image objects for each billionaire
+    const images = new Map();
+    billionaires.forEach(billionaire => {
+      const img = new Image();
+      img.src = BILLIONAIRE_IMAGES[billionaire.name] || '@fallback-avatar.png';
+      images.set(billionaire.name, img);
+    });
+
     const dinoClosedImage = new Image();
     const dinoOpenImage = new Image();
-
-    trumpImage.src = '/trumpface.png';
-    elonImage.src = '/elonmuskface.png';
     dinoClosedImage.src = '/dinomouthclose.png';
     dinoOpenImage.src = '/dinomouthopen.png';
 
@@ -335,13 +342,16 @@ export default function Game() {
         ctx.fillStyle = '#ef4444';
         ctx.fillText(`♥`.repeat(lives), 20, 70);
 
-        // Draw dino and objects
+        // Draw dino
         const dinoImage = isDinoOpen ? dinoOpenImage : dinoClosedImage;
         ctx.drawImage(dinoImage, dino.x, dino.y, 100, 100);
 
+        // Draw falling objects
         objects.forEach(obj => {
-          const image = obj.type === 'trump' ? trumpImage : elonImage;
-          ctx.drawImage(image, obj.x, obj.y, 50, 50);
+          const img = images.get(obj.type);
+          if (img) {
+            ctx.drawImage(img, obj.x, obj.y, 50, 50);
+          }
         });
       }
 
@@ -349,7 +359,7 @@ export default function Game() {
     };
 
     render();
-  }, [objects, isDinoOpen, score, lives, gameState, dino]);
+  }, [objects, isDinoOpen, score, lives, gameState, dino, billionaires]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (gameState !== 'playing') {
@@ -405,8 +415,8 @@ export default function Game() {
             <thead>
               <tr className="border-b border-emerald-600">
                 <th className="px-4 py-2 text-left">Target</th>
-                <th className="px-4 py-2 text-left">Company</th>
                 <th className="px-4 py-2 text-right">Net Worth</th>
+                <th className="px-4 py-2 text-right">Price for Eating Them</th>
               </tr>
             </thead>
             <tbody>
@@ -414,18 +424,20 @@ export default function Game() {
                 <tr key={billionaire.name} className="border-b border-emerald-700">
                   <td className="px-4 py-2 flex items-center">
                     <img 
-                      src={billionaire.image || '/fallback-avatar.png'} 
+                      src={BILLIONAIRE_IMAGES[billionaire.name]}
                       alt={billionaire.name} 
                       className="w-8 h-8 rounded-full mr-2"
                       onError={(e) => {
-                        e.currentTarget.src = '/fallback-avatar.png';
+                        e.currentTarget.src = '@fallback-avatar.png';
                       }}
                     />
                     {billionaire.name}
                   </td>
-                  <td className="px-4 py-2">{billionaire.company}</td>
                   <td className="px-4 py-2 text-right">
                     ${(billionaire.netWorth / 1000000000).toFixed(1)}B
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    ${billionaire.priceToEat}
                   </td>
                 </tr>
               ))}
