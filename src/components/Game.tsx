@@ -65,7 +65,7 @@ export default function Game() {
   const [gameState, setGameState] = useState<GameState>('start');
   const [lives, setLives] = useState(3);
   const [level, setLevel] = useState(1);
-  const [spawnInterval, setSpawnInterval] = useState(800);
+  const [spawnInterval, setSpawnInterval] = useState(600);
   const [dino, setDino] = useState<DinoState>({
     x: 350,
     y: 500,
@@ -77,13 +77,13 @@ export default function Game() {
   const [error, setError] = useState<string | null>(null);
   
   // Adjust these constants for better game speed
-  const DINO_SPEED = 14; // Adjust dino speed
+  const DINO_SPEED = 14;
   const JUMP_FORCE = -20;
   const GRAVITY = 1.2;
   const GROUND_Y = 500;
   const CANVAS_HEIGHT = 600;
-  const FALL_SPEED = 3; // Adjust falling speed
-  const SPAWN_INTERVAL = 1000; // Adjust spawn interval
+  const FALL_SPEED = 4; // Increased from 3
+  const SPAWN_INTERVAL = 1000; // Decreased from 1000
 
   // Add a ref to track the mouth closing timeout
   const mouthTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -193,40 +193,97 @@ export default function Game() {
     setScore(0);
     setLives(3);
     setLevel(1);
-    setSpawnInterval(800);
+    setSpawnInterval(600);
     setObjects([]);
     
     spawnNewObject(); // Immediately spawn first object when game starts
   };
 
-  // Add keyboard controls effect
+  // Modify the continuous movement effect
   useEffect(() => {
     if (gameState !== 'playing') return;
 
+    let lastTime = performance.now();
+    const keysPressed = new Set<string>();
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.code) {
-        case 'ArrowLeft':
-          setDino(prev => ({
-            ...prev,
-            x: Math.max(0, prev.x - DINO_SPEED)
-          }));
-          break;
-        case 'ArrowRight':
-          setDino(prev => ({
-            ...prev,
-            x: Math.min(700, prev.x + DINO_SPEED)
-          }));
-          break;
-        case 'Space':
-          e.preventDefault(); // Prevent the default spacebar action
-          handleJump();
-          break;
-      } 
+      // Prevent default behavior for space key
+      if (e.code === 'Space') {
+        e.preventDefault();
+      }
+      keysPressed.add(e.code);
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      // Prevent default behavior for space key
+      if (e.code === 'Space') {
+        e.preventDefault();
+      }
+      keysPressed.delete(e.code);
+    };
+
+    // Separate animation frame for dino movement
+    const updateDino = (currentTime: number) => {
+      const deltaTime = currentTime - lastTime;
+      lastTime = currentTime;
+
+      // Normalize movement speed using deltaTime
+      const frameAdjustedSpeed = (DINO_SPEED * deltaTime) / 16.67; // 16.67ms is target frame time (60fps)
+
+      setDino(prev => {
+        let newX = prev.x;
+        let newY = prev.y;
+        let newVelocity = prev.velocity;
+        let newIsJumping = prev.isJumping;
+
+        // Handle horizontal movement
+        if (keysPressed.has('ArrowLeft')) {
+          newX = Math.max(0, newX - frameAdjustedSpeed);
+        }
+        if (keysPressed.has('ArrowRight')) {
+          newX = Math.min(700, newX + frameAdjustedSpeed);
+        }
+
+        // Handle jumping physics
+        if (prev.isJumping) {
+          newVelocity = prev.velocity + GRAVITY;
+          newY = prev.y + newVelocity;
+
+          if (newY >= GROUND_Y) {
+            newY = GROUND_Y;
+            newIsJumping = false;
+            newVelocity = 0;
+          }
+        } else if (keysPressed.has('Space')) {
+          newIsJumping = true;
+          newVelocity = JUMP_FORCE;
+          
+        }
+
+        return {
+          x: newX,
+          y: newY,
+          velocity: newVelocity,
+          isJumping: newIsJumping
+        };
+      });
+
+      if (gameState === 'playing') {
+        requestAnimationFrame(updateDino);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState, dino.isJumping]);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    const animationId = requestAnimationFrame(updateDino);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      cancelAnimationFrame(animationId);
+    };
+  }, [gameState]);
 
   // Spawn new object function
   const spawnNewObject = () => {
@@ -493,7 +550,6 @@ export default function Game() {
         );
 
         renderGame();
-
         animationFrameRef.current = requestAnimationFrame(gameLoop);
       };
 
@@ -522,52 +578,6 @@ export default function Game() {
     }
   }, [gameState, spawnInterval]);
 
-  // Add continuous movement for smoother controls
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-
-    const keysPressed = new Set<string>();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      keysPressed.add(e.code);
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keysPressed.delete(e.code);
-    };
-
-    const moveInterval = setInterval(() => {
-      if (keysPressed.has('ArrowLeft')) {
-        setDino(prev => ({
-          ...prev,
-          x: Math.max(0, prev.x - DINO_SPEED)
-        }));
-      }
-      if (keysPressed.has('ArrowRight')) {
-        setDino(prev => ({
-          ...prev,
-          x: Math.min(700, prev.x + DINO_SPEED)
-        }));
-      }
-      if (keysPressed.has('Space') && !dino.isJumping) {
-        setDino(prev => ({
-          ...prev,
-          isJumping: true,
-          velocity: JUMP_FORCE
-        }));
-      }
-    }, 16);
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      clearInterval(moveInterval);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [gameState, dino.isJumping]);
-
   // Update render effect with better cleanup
   useEffect(() => {
     renderGame();
@@ -592,23 +602,8 @@ export default function Game() {
   const updateLevel = () => {
     const newLevel = Math.floor(score / 100) + 1;
     setLevel(newLevel);
-    // Make objects spawn faster as level increases, with a minimum of 400ms
-    setSpawnInterval(Math.max(800 - (newLevel - 1) * 50, 400));
-  };
-
-  // Handle jump start
-  const handleJump = () => {
-    if (!dino.isJumping && gameState === 'playing') {
-      setDino(prev => ({
-        ...prev,
-        isJumping: true,
-        velocity: JUMP_FORCE
-      }));
-    }
-  };
-
-  const updateGame = () => {
-    // Handle game logic such as updating object positions, collision detection, etc.
+    // Make objects spawn faster as level increases, with a minimum of 300ms
+    setSpawnInterval(Math.max(600 - (newLevel - 1) * 50, 300)); // Adjusted from 800/400
   };
 
   // Add this new function after the existing helper functions
