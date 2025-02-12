@@ -14,10 +14,11 @@ interface FallingObject {
   y: number;
   type: 'elon' | 'bezos' | 'zuck' | 'trump' | 'rainbow';
   isDragging: boolean;
+  processed?: boolean;
 }
 
 interface Billionaire {
-  name: string;
+  name: 'Elon Musk' | 'Jeff Bezos' | 'Mark Zuckerberg' | 'Donald Trump';
   netWorth: number;
   image: string;
   priceToEat: number;
@@ -25,11 +26,12 @@ interface Billionaire {
 
 
 // Create a mapping for billionaire names to their image files
-const BILLIONAIRE_IMAGES = {
-  'Elon Musk': '/elonmuskface.png',
-  'Jeff Bezos': '/jeffbezosface.png',
-  'Mark Zuckerberg': '/markzuckface.png',
-  'Donald Trump': '/trumpface.png'
+const BILLIONAIRE_IMAGES: Record<FallingObject['type'], string> = {
+  'elon': '/elonmuskface.png',
+  'bezos': '/jeffbezosface.png',
+  'zuck': '/markzuckface.png',
+  'trump': '/trumpface.png',
+  'rainbow': '/rainbow.png'  // Add a rainbow image for special objects
 };
 
 // Add these new interfaces after the existing interfaces
@@ -66,6 +68,26 @@ interface DinoState {
   direction: 'left' | 'right';
 }
 
+const getBillionaireName = (type: FallingObject['type']): Billionaire['name'] | undefined => {
+  const nameMap: Record<Exclude<FallingObject['type'], 'rainbow'>, Billionaire['name']> = {
+    'elon': 'Elon Musk',
+    'bezos': 'Jeff Bezos',
+    'zuck': 'Mark Zuckerberg',
+    'trump': 'Donald Trump'
+  };
+  return type !== 'rainbow' ? nameMap[type] : undefined;
+};
+
+const getBillionaireType = (name: string): 'elon' | 'bezos' | 'zuck' | 'trump' => {
+  const typeMap: { [key: string]: 'elon' | 'bezos' | 'zuck' | 'trump' } = {
+    'Elon Musk': 'elon',
+    'Jeff Bezos': 'bezos',
+    'Mark Zuckerberg': 'zuck',
+    'Donald Trump': 'trump'
+  };
+  return typeMap[name] || 'elon'; // Default to 'elon' if name not found
+};
+
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [objects, setObjects] = useState<FallingObject[]>([]);
@@ -94,7 +116,7 @@ export default function Game() {
   const mouthTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Add a ref for the animation frame
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
   // Add these new state variables in the Game component
   const [particles, setParticles] = useState<Particle[]>([]);
@@ -331,7 +353,7 @@ export default function Game() {
       id: Date.now(),
       x: xPosition ?? Math.random() * (canvas.width - 50),
       y: -50 - (Math.random() * 100),
-      type: selectedBillionaire.name,
+      type: getBillionaireType(selectedBillionaire.name),
       isDragging: false
     };
     setObjects(prev => [...prev, newObject]);
@@ -534,17 +556,18 @@ export default function Game() {
     const gameLoop = () => {
       setObjects((prevObjects) => {
         return prevObjects.map((obj) => {
-          if (obj.processed) return obj; // Skip already processed objects
+          if (obj.processed) return obj; // Now TypeScript knows about this property
 
           const newY = obj.y + fallSpeed;
           const hasCollided = checkCollision(dino, obj);
 
           if (hasCollided) {
-            const billionaire = billionaires.find(b => b.name === obj.type);
+            const billionaireName = getBillionaireName(obj.type);
+            const billionaire = billionaireName ? billionaires.find(b => b.name === billionaireName) : undefined;
             if (billionaire) {
-              setScore(prev => prev + Math.floor(billionaire.priceToEat / 2)); // Add half the points
+              setScore(prev => prev + Math.floor(billionaire.priceToEat / 2));
             }
-            return { ...obj, processed: true }; // Mark as processed
+            return { ...obj, processed: true };
           }
 
           if (newY >= CANVAS_HEIGHT) {
@@ -555,11 +578,11 @@ export default function Game() {
               }
               return newLives;
             });
-            return { ...obj, processed: true }; // Mark as processed
+            return { ...obj, processed: true };
           }
 
           return { ...obj, y: newY };
-        }).filter(obj => !obj.processed); // Remove processed objects
+        }).filter(obj => !obj.processed);
       });
 
       // Update dino physics
@@ -769,16 +792,14 @@ export default function Game() {
                   <td className="px-4 py-2 flex items-center">
                     <div className="relative w-8 h-8">
                       <Image
-                        src={BILLIONAIRE_IMAGES[billionaire.name]}
+                        src={BILLIONAIRE_IMAGES[getBillionaireType(billionaire.name)]}
                         alt={billionaire.name}
                         width={32}
                         height={32}
                         className="rounded-full mr-2"
                         onError={(e) => {
-                          // Prevent infinite error loop
                           e.currentTarget.onerror = null;
-                          // Use proper path for fallback image
-                          e.currentTarget.src = '/fallback-avatar.png'; // Note: changed from @ to /
+                          e.currentTarget.src = '/placeholder.png';
                         }}
                       />
                     </div>

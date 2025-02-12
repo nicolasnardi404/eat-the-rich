@@ -57,7 +57,6 @@ export async function GET() {
 
     const updatedData = [...FALLBACK_DATA];
 
-    // Helper function to update billionaire data
     const updateBillionaireData = async (response: Response, nameMatch: string, defaultImage: string) => {
       if (response.ok) {
         const data = await response.json();
