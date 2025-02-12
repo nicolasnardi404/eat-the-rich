@@ -38,22 +38,22 @@ export async function GET() {
     const options = {
       method: 'GET',
       headers: {
-        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
-        'X-RapidAPI-Host': process.env.RAPIDAPI_HOST
+        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '',
+        'X-RapidAPI-Host': process.env.RAPIDAPI_HOST || ''
       }
     };
 
     // Fetch all billionaires' data
-    // const [elonResponse, zuckResponse, bezosResponse, trumpResponse] = await Promise.all([
-    //   fetch('https://forbes-billionaires-api.p.rapidapi.com/detail.php?id=elon-musk', options),
-    //   fetch('https://forbes-billionaires-api.p.rapidapi.com/detail.php?id=mark-zuckerberg', options),
-    //   fetch('https://forbes-billionaires-api.p.rapidapi.com/detail.php?id=jeff-bezos', options),
-    //   fetch('https://forbes-billionaires-api.p.rapidapi.com/detail.php?id=donald-trump', options)
-    // ]);
+    const [elonResponse, zuckResponse, bezosResponse, trumpResponse] = await Promise.all([
+      fetch('https://forbes-billionaires-api.p.rapidapi.com/detail.php?id=elon-musk', options),
+      fetch('https://forbes-billionaires-api.p.rapidapi.com/detail.php?id=mark-zuckerberg', options),
+      fetch('https://forbes-billionaires-api.p.rapidapi.com/detail.php?id=jeff-bezos', options),
+      fetch('https://forbes-billionaires-api.p.rapidapi.com/detail.php?id=donald-trump', options)
+    ]);
 
-    // if (!elonResponse.ok && !zuckResponse.ok && !bezosResponse.ok && !trumpResponse.ok) {
-    //   return NextResponse.json(FALLBACK_DATA);
-    // }
+    if (!elonResponse.ok && !zuckResponse.ok && !bezosResponse.ok && !trumpResponse.ok) {
+      return NextResponse.json(FALLBACK_DATA);
+    }
 
     const updatedData = [...FALLBACK_DATA];
 
@@ -74,13 +74,13 @@ export async function GET() {
       }
     };
 
-    // // Update all billionaires' data in parallel
-    // await Promise.all([
-    //   updateBillionaireData(elonResponse, 'Musk', '@elonmuskface.png'),
-    //   updateBillionaireData(zuckResponse, 'Zuckerberg', '@markzuckface.png'),
-    //   updateBillionaireData(bezosResponse, 'Bezos', '@jeffbezosface.png'),
-    //   updateBillionaireData(trumpResponse, 'Trump', '@trumpface.png')
-    // ]);
+    // Update all billionaires' data in parallel
+    await Promise.all([
+      updateBillionaireData(elonResponse, 'Musk', '@elonmuskface.png'),
+      updateBillionaireData(zuckResponse, 'Zuckerberg', '@markzuckface.png'),
+      updateBillionaireData(bezosResponse, 'Bezos', '@jeffbezosface.png'),
+      updateBillionaireData(trumpResponse, 'Trump', '@trumpface.png')
+    ]);
 
     return NextResponse.json(updatedData);
 
