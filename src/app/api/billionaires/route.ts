@@ -9,26 +9,26 @@ const calculatePriceToEat = (netWorth: number): number => {
 const FALLBACK_DATA = [
     {
       name: 'Elon Musk',
-      netWorth: 234000000000,
-      priceToEat: calculatePriceToEat(234000000000),
+      netWorth: 378800000000,
+      priceToEat: calculatePriceToEat(378800000000),
       image: '@elonmuskface.png'  // Using local image
     },
     {
       name: 'Jeff Bezos',
-      netWorth: 180000000000,
-      priceToEat: calculatePriceToEat(180000000000),
+      netWorth: 242700000000,
+      priceToEat: calculatePriceToEat(242700000000),
       image: '@jeffbezosface.png'  // Using local image
     },
     {
       name: 'Mark Zuckerberg',
-      netWorth: 177000000000,
-      priceToEat: calculatePriceToEat(177000000000),
+      netWorth: 247600000000,
+      priceToEat: calculatePriceToEat(247600000000),
       image: '@markzuckface.png'  // Using local image
     },
     {
       name: 'Donald Trump',
-      netWorth: 2500000000,
-      priceToEat: calculatePriceToEat(2500000000),
+      netWorth: 5800000000,
+      priceToEat: calculatePriceToEat(25800000000),
       image: '@trumpface.png'  // Using local image
     }
   ];
